@@ -107,7 +107,7 @@ export function createCloud(host) {
       if(result.error){message='登录暂未恢复，请联网后重试；账号本机副本已保留。';publish();}
     }catch{message='暂时无法连接云端。请保留本机备份，联网后重试。';publish();}
   }
-  function panel(){return `<section class="panel backup-panel cloud-panel"><div class="panel-heading"><div><h2>账号与云端保存</h2><p>Klaire's Project · 英语学习，和浅草健身独立。</p></div></div><div class="cloud-content"><strong data-cloud-account>${esc(account?.email||'尚未登录')}</strong><p data-cloud-status role="status" aria-live="polite"></p>
+  function panel(){return `<section class="panel backup-panel cloud-panel"><div class="panel-heading"><div><h2>账号与云端保存</h2><p>登录后可在不同设备上同步学习记录。</p></div></div><div class="cloud-content"><strong data-cloud-account>${esc(account?.email||'尚未登录')}</strong><p data-cloud-status role="status" aria-live="polite"></p>
     <form method="post" id="cloud-login" class="cloud-auth-form" data-cloud-guest ${active()?'hidden':''}>
       <label class="cloud-auth-field" for="cloud-email">邮箱
         <input id="cloud-email" type="email" name="email" required autocomplete="username">

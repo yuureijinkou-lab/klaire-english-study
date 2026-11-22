@@ -959,6 +959,10 @@ h3, .guide-panel h3, .collection h3,
   display: block;
   overflow-wrap: anywhere;
 }
+.handbook-mark {
+  display: block;
+  flex: none;
+}
 .cloud-panel [data-cloud-status] {
   margin: 4px 0 0;
   color: var(--muted);

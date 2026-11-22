@@ -451,17 +451,17 @@ function render() {
   else content=renderSettings(s);
   const parent=parentPage(page);
   $('#app').innerHTML = `
-    <aside class="sidebar"><button class="brand" data-nav="home"><span class="brand-mark">${icon('book')}</span><span>Klaire</span></button>
+    <aside class="sidebar"><button class="brand" data-nav="home"><img class="handbook-mark" src="./handbook-icon.svg" alt="" width="36" height="36"><span>英语学习手册</span></button>
       <nav aria-label="主导航">${nav(false)}</nav>
       <div class="local-label"><span class="status-dot ${!storageOK?'bad':''}"></span>${storageOK?'记录保存在本机':'请备份当前记录'}</div>
     </aside>
-    <div class="workspace"><header class="topbar"><span class="mobile-brand">${icon('book')} Klaire</span><span class="breadcrumb">${pageName(current)}</span>
+    <div class="workspace"><header class="topbar"><span class="mobile-brand"><img class="handbook-mark" src="./handbook-icon.svg" alt="" width="27" height="27">英语学习手册</span><span class="breadcrumb">${pageName(current)}</span>
       <div class="topbar-right"><span class="local-chip">${icon('shield')} 本地版</span></div></header>
     <main id="main" tabindex="-1">
       ${!storageOK ? `<div class="storage-warning" role="alert">${icon('info')}<div><strong>${corruptRaw!==null?'检测到原来的记录格式异常，已保留原文。':'当前修改尚未可靠保存。'}</strong><p>${corruptRaw!==null?'当前展示初始词表；请先下载原始记录和当前备份，再恢复有效备份。':'请不要关闭页面，先下载备份。可能是浏览器禁止保存或存储空间不足。'}</p></div><button class="btn small" data-action="export">下载当前备份</button>${corruptRaw!==null?'<button class="btn small" data-action="export-raw">下载原始记录</button>':''}</div>`:''}
       ${parent?`<div class="page-back"><button type="button" class="text-button" data-action="back-to-parent">${icon('back')} 返回${pageName(parent)}</button></div>`:''}
       ${content}
-    </main><footer class="page-footer"><span>学习记录保存在当前浏览器</span><span>Klaire · 本地版 3.10.0</span></footer></div>
+    </main><footer class="page-footer"><span>学习记录保存在当前浏览器</span><span>英语学习手册 · 3.10.0</span></footer></div>
     <nav class="mobile-nav" aria-label="手机导航">${nav(true)}</nav>`;
   cloud?.publish();
 }
