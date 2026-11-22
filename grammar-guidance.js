@@ -65,7 +65,7 @@ export function guidanceForCard(id) {
   const numbered = /^grammar-(\d{3})$/.exec(id);
   if (numbered) return basicGuides[Number(numbered[1])-1];
   if(id==='grammar-extra-future-perfect-progressive')return '先找未来的参照时间，再看某个过程到那时已经持续多久。重点是时长，不是完结后的成果。';
-  if (Object.hasOwn(EXPANDED_GUIDANCE,id)) return EXPANDED_GUIDANCE[id];
+  if (Object.prototype.hasOwnProperty.call(EXPANDED_GUIDANCE,id)) return EXPANDED_GUIDANCE[id];
   const personal = /^grammar-klaire-(.+)$/.exec(id);
   return personal ? personalGuides[personal[1]] : undefined;
 }

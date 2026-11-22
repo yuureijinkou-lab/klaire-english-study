@@ -1,12 +1,13 @@
+import { cloneStudyData, studyUuid } from './compat.js';
 import { validateState } from './core.js';
 
-const copy = value => structuredClone(value);
+const copy = value => cloneStudyData(value);
 const same = (a,b) => JSON.stringify(a) === JSON.stringify(b);
 const parseState = raw => validateState(typeof raw === 'string' ? JSON.parse(raw) : raw);
 export class JournalRepository {
   constructor(storage,userId) {
     this.storage=storage;this.prefix=`klaire.study/${encodeURIComponent(userId)}/`;
-    this.writer=crypto.randomUUID();
+    this.writer=studyUuid();
     this.frame=null;this.baseRevision=0;
     this.viewPayload=null;
     const raw=storage.getItem(this.prefix+'cache');
@@ -19,7 +20,7 @@ export class JournalRepository {
   previousRaw(){return this.storage.getItem(this.prefix+'previous');}
   beforeUpgradeRaw(){return this.storage.getItem(this.prefix+'upgrade');}
   save(state) {
-    const data=parseState(state),id=crypto.randomUUID();
+    const data=parseState(state),id=studyUuid();
     const parent=this.frame;
     const draft={id,parent,writer:this.writer,revision:this.base({parent,revision:this.baseRevision}),payload:data,at:Date.now()};
     // Each tab owns an immutable draft. Never replace another tab's pending edit.

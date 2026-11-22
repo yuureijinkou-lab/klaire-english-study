@@ -1,3 +1,4 @@
+import { cloneStudyData, studyUuid, prepareStudyDialog } from './compat.js';
 import { SEED_ENTRIES } from './data.js';
 import { SCHEMA_VERSION, STORAGE_KEY, DAY, NEW_PER_DAY_OPTIONS, kindFor, createState, prepareState, validateState, exportObject, activeEntries, isDue, schedule, recordReview, recordSpelling, checkSpelling, makeQueue, stats } from './core.js';
 import { BOOKS, LESSON_MODULES, lessonKey, lessonFields, parseEntryLines, parseLessonText, planLessonImport } from './curriculum.js';
@@ -104,7 +105,7 @@ const ui = { page:'home', filter:'all', book:'all', category:'all', search:'', l
   grammarView:'overview', grammarBranch:'structure', grammarTense:'habit', grammarMore:false, grammarPerson:'i', grammarClause:'noun', libraryFiltersOpen:false, ipaSlow:false };
 const sceneView = {id:REVIEW_SCENES[0].id, bilingual:true};
 const openLibraryGroups = {grammar:new Set(),words:new Set()};
-const usesLibraryIndex = page => Object.hasOwn(openLibraryGroups,page);
+const usesLibraryIndex = page => Object.prototype.hasOwnProperty.call(openLibraryGroups,page);
 const defaultListLimit = page => page==='words'?240:page==='grammar'?96:24;
 const returnViews = [];
 let pendingRestore = null;
@@ -133,7 +134,7 @@ const reviewDate = new Intl.DateTimeFormat('zh-CN',{month:'long',day:'numeric',h
 const reviewTime = at => `<time datetime="${new Date(at).toISOString()}">${reviewDate.format(at)}</time>`;
 
 function commit(change) {
-  const next = structuredClone(state);
+  const next = cloneStudyData(state);
   change(next);
   state = next;
   if (corruptRaw !== null) { storageOK = false; toast('原来的记录格式异常。本次修改仅暂存，请先下载备份。'); return; }
@@ -295,7 +296,7 @@ function renderGrammarBreakdown(example) {
 }
 function grammarExplanation(e) {
   const guide=guidanceForCard(e.id);
-  const example=Object.hasOwn(GRAMMAR_BREAKDOWNS,e.id)?GRAMMAR_BREAKDOWNS[e.id]:null;
+  const example=Object.prototype.hasOwnProperty.call(GRAMMAR_BREAKDOWNS,e.id)?GRAMMAR_BREAKDOWNS[e.id]:null;
   return `<div class="grammar-explanation">
     ${guide?`<section class="grammar-start"><h3>先怎么看</h3><p>${esc(guide)}</p></section>`:''}
     <section><h3>用法</h3><p>${lines(e.explanation)}</p></section>
@@ -443,7 +444,7 @@ function render() {
   else if(page==='pronunciation') content=renderPhoneticGuide({escape:esc,icon,slow:ui.ipaSlow});
   else if(page==='course') content=renderCourseHub();
   else if(page==='sources') content=courseSourcePage();
-  else if(Object.hasOwn(COURSE_PAGES,page)) content=renderCourse();
+  else if(Object.prototype.hasOwnProperty.call(COURSE_PAGES,page)) content=renderCourse();
   else if(page==='phrases') content=renderPhraseHub();
   else if(modules[page]) content=renderLibrary(page);
   else if(page==='practice') content=renderPractice();
@@ -749,7 +750,7 @@ function saveEntry(form) {
   const f=new FormData(form),id=form.dataset.id;
   const en=f.get('en').trim(),zh=f.get('zh').trim();
   if(!en||!zh){toast('英文和中文含义都需要填写。');return;}
-  const newId=id||`user-${crypto.randomUUID()}`;
+  const newId=id||`user-${studyUuid()}`;
   commit(next=>{
     let e=next.entries.find(e=>e.id===id);
     if(!e){e={id:newId,source:'我自己添加',sourceNote:'',favorite:false,deletedAt:0};next.entries.push(e);}
@@ -769,15 +770,15 @@ function saveGrammar(form) {
   const f=new FormData(form),id=form.dataset.id;
   const exampleLines=String(f.get('examples')).split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
   if(exampleLines.length<2||exampleLines.length%2||exampleLines.length>24||exampleLines.some(x=>x.length>2000)){toast('例句请按一行英文、一行中文填写，至少一组，最多12组，每行不超过2000字。');return;}
-  const e={...(id?findEntry(id):{id:`user-${crypto.randomUUID()}`,source:'我自己添加',sourceNote:'',favorite:false,deletedAt:0}),module:'grammar',kind:'grammar',needsCheck:false};
+  const e={...(id?findEntry(id):{id:`user-${studyUuid()}`,source:'我自己添加',sourceNote:'',favorite:false,deletedAt:0}),module:'grammar',kind:'grammar',needsCheck:false};
   for(const key of ['title','category','book','prompt','explanation','structures','mistakes','comparison','notes'])e[key]=String(f.get(key)||'').trim();
   e.examples=exampleLines.filter((_,i)=>i%2===0).map((en,i)=>({en,zh:exampleLines[i*2+1]}));
-  try{const probe=structuredClone(state);const i=probe.entries.findIndex(x=>x.id===e.id);if(i<0)probe.entries.push(e);else probe.entries[i]=e;validateState(probe);}catch(err){toast(err.message);return;}
+  try{const probe=cloneStudyData(state);const i=probe.entries.findIndex(x=>x.id===e.id);if(i<0)probe.entries.push(e);else probe.entries[i]=e;validateState(probe);}catch(err){toast(err.message);return;}
   commit(next=>{const i=next.entries.findIndex(x=>x.id===e.id);if(i<0)next.entries.push(e);else next.entries[i]=e;});
   $('#dialog').close();render();toast('语法卡已保存。');
 }
 function parentPage(page) {
-  return subpageParents[page]?(returnViews.at(-1)?.view.page||subpageParents[page]):null;
+  return subpageParents[page]?(returnViews[returnViews.length - 1]?.view.page||subpageParents[page]):null;
 }
 
 function showPage(scroll=0) {
@@ -801,7 +802,7 @@ function backToParent() {
 }
 
 function navigate(page,force=false) {
-  const isSubpage=Object.hasOwn(subpageParents,page);
+  const isSubpage=Object.prototype.hasOwnProperty.call(subpageParents,page);
   if(!isSubpage&&!sections.some(([key])=>key===page))return;
   if(page===ui.page)return;
   if(ui.page==='practice'&&ui.session&&!ui.session.done&&!force){showConfirm('先结束这次练习吗？','<p>已经完成的答案都已记录。未完成的内容可以下次继续学习。</p>','结束并返回',()=>navigate(page,true));return;}
@@ -846,7 +847,7 @@ function addCourseEntries(requestedModule) {
 
 function previewCourseImport(records) {
   try {
-    const plan=planLessonImport(state,records,()=>`user-${crypto.randomUUID()}`);
+    const plan=planLessonImport(state,records,()=>`user-${studyUuid()}`);
     if(!plan.updatedLessons&&!plan.entries.length){toast('没有可新增的内容，已有资料已保留。');return;}
     const current=state;
     const wordCount=plan.entries.filter(e=>e.kind==='word').length;
@@ -925,7 +926,8 @@ function performRestore() {
 }
 
 function updateVoices() {
-  voices='speechSynthesis' in window?speechSynthesis.getVoices().filter(v=>v.localService&&/^en[-_]/i.test(v.lang)):[];
+  const availableVoices=window.speechSynthesis?.getVoices?.() || [];
+  voices=Array.from(availableVoices).filter(v=>v.localService&&/^en[-_]/i.test(v.lang));
   if(ui.page==='settings'&&!$('#dialog').open)render();
 }
 function stopPhoneme() {
@@ -1187,7 +1189,6 @@ window.addEventListener('storage',event=>{
   catch{storageOK=false;toast('另一个标签页的记录格式异常，请先备份当前页面。');}
 });
 window.addEventListener('beforeunload',event=>{if(!storageOK){event.preventDefault();event.returnValue='';}});
-if('speechSynthesis' in window)speechSynthesis.addEventListener('voiceschanged',updateVoices);
 const canSwitchAccount=()=>storageOK&&corruptRaw===null&&!$('#dialog').open&&(!ui.session||ui.session.done);
 cloud=createCloud({
   guestRepository:repository,
@@ -1210,6 +1211,10 @@ cloud=createCloud({
   receive(nextState){state=nextState;render();},
   render,toast,download,backup:exportBackup,confirm:showConfirm,modal:openModal,close:closeOpenDialog
 });
+prepareStudyDialog($('#dialog'));
 $('#dialog').addEventListener('close',()=>cloud.schedule());
-render();updateVoices();void cloud.initialize();
+render();
+void cloud.initialize();
+window.speechSynthesis?.addEventListener?.('voiceschanged',updateVoices);
+updateVoices();
 setInterval(()=>{if(ui.page==='home'&&!$('#dialog').open)render();},60000);

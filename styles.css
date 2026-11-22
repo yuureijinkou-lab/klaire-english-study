@@ -1028,3 +1028,19 @@ h3, .guide-panel h3, .collection h3,
   height: 1px;
   overflow: hidden;
 }
+
+dialog:not([open]) {
+  display: none;
+}
+dialog[data-legacy-modal][open] {
+  display: block;
+  position: fixed;
+  z-index: 50;
+  top: 50%;
+  left: 50%;
+  margin: 0;
+  transform: translate(-50%, -50%);
+  max-height: calc(100vh - 40px);
+  box-shadow: 0 0 0 200vmax #23332388;
+  overscroll-behavior: contain;
+}

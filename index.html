@@ -11,12 +11,17 @@
 </head>
 <body>
   <a class="skip-link" href="#main">跳到学习内容</a>
-  <div id="app"></div>
+  <div id="app">
+    <main id="main" class="panel" role="status">
+      <h1>Klaire · 英语学习</h1>
+      <p id="startup-status">正在加载。若页面一直未打开，请重新载入，或直接用手机浏览器打开这个网址。</p>
+    </main>
+  </div>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <dialog id="dialog" aria-labelledby="dialog-title"></dialog>
   <input type="file" id="backup-file" accept=".json,application/json" hidden>
   <input type="file" id="course-file" accept=".txt,text/plain,.json,application/json" hidden>
   <script src="./supabase.js"></script>
-  <script type="module" src="./app.js"></script>
+  <script type="module" src="./startup.js"></script>
 </body>
 </html>

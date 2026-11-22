@@ -1,3 +1,4 @@
+import { cloneStudyData } from './compat.js';
 import {LESSON_MODULES, lessonKey, validateLessons} from './curriculum.js';
 
 export const SCHEMA_VERSION = 3;
@@ -12,7 +13,7 @@ export const NEW_PER_DAY_OPTIONS = [5, 10, 20, 30, 'unlimited'];
 export const DEFAULT_SETTINGS = { newPerDay: 10, accent: 'en-GB', direction: 'en-zh', voiceURI: '', lastFocusTopic: '' };
 
 export function createState(entries) {
-  return { schemaVersion: SCHEMA_VERSION, entries: structuredClone(entries).map(e=>({...e,kind:e.kind||kindFor(e.module)})), lessons:{}, progress: {}, activities: [], settings: { ...DEFAULT_SETTINGS } };
+  return { schemaVersion: SCHEMA_VERSION, entries: cloneStudyData(entries).map(e=>({...e,kind:e.kind||kindFor(e.module)})), lessons:{}, progress: {}, activities: [], settings: { ...DEFAULT_SETTINGS } };
 }
 // Stable IDs preserve edits and soft deletions. Missing built-ins alone are appended.
 export function prepareState(input, seeds) {
@@ -96,7 +97,7 @@ export function stats(state, now = Date.now()) {
 
 // The export format is deliberately independent of browser storage and future cloud providers.
 export function exportObject(state, now = Date.now()) {
-  return { app: 'little-english-garden', exportedAt: new Date(now).toISOString(), ...structuredClone(state) };
+  return { app: 'little-english-garden', exportedAt: new Date(now).toISOString(), ...cloneStudyData(state) };
 }
 export function validateState(input) {
   const fail = message => { throw new Error(message); };

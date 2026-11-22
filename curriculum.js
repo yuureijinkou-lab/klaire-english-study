@@ -57,7 +57,7 @@ export function parseLessonText(text, book, source = '') {
       records.push(current);
       section = 'text';
     } else if (current) {
-      if (Object.hasOwn(sections,normalized)) section = sections[normalized];
+      if (Object.prototype.hasOwnProperty.call(sections,normalized)) section = sections[normalized];
       else current[section].push(line);
     } else if (normalized) {
       throw new Error(`第${index+1}行请先写课号，例如「第1课 我的课名」或「Lesson 1 My lesson」。`);
