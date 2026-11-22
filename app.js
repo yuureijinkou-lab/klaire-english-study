@@ -13,7 +13,7 @@ import { GRAMMAR_BREAKDOWNS } from './grammar-breakdowns.js';
 import { BASIC_WORD_GROUPS } from './basic-words.js';
 import { STUDY_WORD_GROUPS } from './study-groups.js';
 import { BrowserRepository } from './repository.js';
-import { createCloud } from './cloud.js';
+import { createCloud } from './cloud.js?v=handbook';
 
 const $ = s => document.querySelector(s);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
