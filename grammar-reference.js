@@ -113,13 +113,28 @@ export function renderPersonGuide({personId,byId,escape,icon}) {
   </div>`;
 }
 
+const phonemeSounds = new Set(PHONETIC_GROUPS.flatMap(group=>group.rows.map(([sound])=>sound)));
+
+export function phonemeAudioUrl(sound) {
+  if(!phonemeSounds.has(sound))return undefined;
+  const name=Array.from(sound,letter=>letter.codePointAt(0).toString(16)).join('-');
+  return new URL(`./audio/phonemes/${name}.wav`,import.meta.url).href;
+}
+
 export function renderPhoneticGuide({escape,icon,slow}) {
   return `<div class="guide-stack"><section class="panel guide-panel"><h1>音标与发音</h1>
-    <p>点任一音标卡，会朗读它下面的示例单词。先看左边的音，再在完整词的音标里找到它。</p>
-    <div class="grammar-map-switch ipa-speed" role="group" aria-label="音标示例朗读速度"><button type="button" class="btn" data-action="ipa-speed" data-slow="false" aria-pressed="${!slow}">正常</button><button type="button" class="btn" data-action="ipa-speed" data-slow="true" aria-pressed="${slow}">慢速</button></div>
-    <p class="subtle">/ / 夹着发音；ˈ 标在重读音节前。音标用常见英式标法。发音按钮沿用单词库的本机朗读和口音设置。</p></section>
-    ${PHONETIC_GROUPS.map(group=>`<section class="panel guide-panel"><h3>${group.title}</h3><p>${group.tip}</p><div class="ipa-grid">${group.rows.map(([sound,word,ipa])=>`<button type="button" class="ipa-tile" data-action="guide-speak" data-text="${escape(word)}" data-slow="${slow}" aria-label="音标 ${escape(sound)}，朗读 ${escape(word)}">
-      <strong>/${sound}/</strong>${icon('speaker')}<span lang="en">${word}</span><span class="ipa">/${ipa}/</span></button>`).join('')}</div></section>`).join('')}
+    <p>点「听音标」听这个音，再点下面的英文单词听例词。</p>
+    <div class="grammar-map-switch ipa-speed" role="group" aria-label="例词朗读速度"><span>例词速度</span><button type="button" class="btn" data-action="ipa-speed" data-slow="false" aria-pressed="${!slow}">正常</button><button type="button" class="btn" data-action="ipa-speed" data-slow="true" aria-pressed="${slow}">慢速</button></div>
+    <p class="subtle">/ / 夹着发音；ˈ 标在重读音节前。音标用常见英式标法。单个音标播放内置的英式合成示范，例词沿用本机朗读和口音设置。</p></section>
+    ${PHONETIC_GROUPS.map(group=>`<section class="panel guide-panel"><h3>${group.title}</h3><p>${group.tip}</p><div class="ipa-grid">${group.rows.map(([sound,word,ipa])=>`
+      <article class="ipa-tile">
+        <button type="button" class="ipa-sound-button" data-action="phoneme-speak" data-sound="${escape(sound)}" aria-label="听音标 /${escape(sound)}/">
+          <strong>/${sound}/</strong><span>${icon('speaker')} 听音标</span>
+        </button>
+        <button type="button" class="ipa-word-button" data-action="guide-speak" data-text="${escape(word)}" data-slow="${slow}" aria-label="听例词 ${escape(word)}">
+          <span>${icon('speaker')} <span lang="en">${word}</span></span><span class="ipa">/${ipa}/</span>
+        </button>
+      </article>`).join('')}</div></section>`).join('')}
     <section class="panel guide-panel"><h3>容易听混的两组</h3><ul class="guide-example-list">${[['seat / sit','先听 /iː/ 和 /ɪ/。','seat','sit'],['think / sink','先听开头 /θ/ 和 /s/。','think','sink']].map(([pair,tip,a,b])=>`<li><span><strong lang="en">${pair}</strong><small>${tip}</small></span>${guideAudio(a,{escape,icon,slow})}${guideAudio(b,{escape,icon,slow})}</li>`).join('')}</ul>
     <p class="subtle">例如 tour 在一些英式读法中用 /ʊə/，也常听到 /ɔː/。可对照 <a href="https://dictionary.cambridge.org/help/phonetics.html" target="_blank" rel="noopener noreferrer">剑桥词典发音符号说明</a>。</p></section>
   </div>`;

@@ -2,7 +2,7 @@ import { STORAGE_KEY, PREVIOUS_KEY, UPGRADE_KEY } from './core.js';
 const BEFORE_V3_KEY = 'english-garden.before-upgrade.v2';
 
 // Browser-only persistence boundary. The learning rules in core.js have no storage dependency.
-// Guest storage stays synchronous; cloud.js coordinates the separate account journal.
+// A future Supabase implementation must make callers asynchronous and add authentication/conflict handling.
 export class BrowserRepository {
   constructor(storage) { this.storage = storage; }
   loadRaw() { return this.storage.getItem(STORAGE_KEY); }

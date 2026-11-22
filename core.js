@@ -8,6 +8,7 @@ export const MODULES = ['words', 'daily', 'travel', 'nce1', 'grammar', 'nce2', .
 export const kindFor = module => module==='grammar'?'grammar':['words','course-words'].includes(module)?'word':'phrase';
 export const DAY = 86400000;
 export const INTERVALS = [1, 3, 7, 14, 30];
+export const NEW_PER_DAY_OPTIONS = [5, 10, 20, 30, 'unlimited'];
 export const DEFAULT_SETTINGS = { newPerDay: 10, accent: 'en-GB', direction: 'en-zh', voiceURI: '', lastFocusTopic: '' };
 
 export function createState(entries) {
@@ -65,8 +66,9 @@ export function makeQueue(state, { module, ids, now = Date.now(), onlyNew = fals
   }
   const due = entries.filter(e => isDue(state, e, now)).sort((a, b) => state.progress[a.id].dueAt - state.progress[b.id].dueAt);
   const learnedToday = state.activities.filter(a => a.type === 'review' && a.isNew && localDay(a.at) === localDay(now)).length;
-  const allowance = Math.max(0, state.settings.newPerDay - learnedToday);
   const candidates=entries.filter(e=>!state.progress[e.id]);
+  const allowance = state.settings.newPerDay === 'unlimited'
+    ? candidates.length : Math.max(0, state.settings.newPerDay - learnedToday);
   // Rotate the first module after the most recent new item, including across sessions.
   const last=[...state.activities].reverse().find(a=>a.type==='review'&&a.isNew);
   const lastModule=state.entries.find(e=>e.id===last?.itemId)?.module;
@@ -144,7 +146,7 @@ export function validateState(input) {
     return { itemId: a.itemId, at: a.at, type: a.type, correct: a.correct };
   });
   const s = input.settings;
-  if (!plain(s) || ![5,10,20,30].includes(s.newPerDay) || !['en-GB','en-US'].includes(s.accent) || !['en-zh','zh-en'].includes(s.direction) || !str(s.voiceURI, 1000)) fail('学习设置格式不正确。');
+  if (!plain(s) || !NEW_PER_DAY_OPTIONS.includes(s.newPerDay) || !['en-GB','en-US'].includes(s.accent) || !['en-zh','zh-en'].includes(s.direction) || !str(s.voiceURI, 1000)) fail('学习设置格式不正确。');
   const lessons=validateLessons(input.schemaVersion===3?input.lessons:{});
   const lastFocusTopic=str(s.lastFocusTopic,40)&&/^[a-z-]+$/.test(s.lastFocusTopic)?s.lastFocusTopic:DEFAULT_SETTINGS.lastFocusTopic;
   return { schemaVersion: SCHEMA_VERSION, entries, lessons, progress, activities, settings: { newPerDay:s.newPerDay, accent:s.accent, direction:s.direction, voiceURI:s.voiceURI, lastFocusTopic } };

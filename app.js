@@ -1,11 +1,11 @@
 import { SEED_ENTRIES } from './data.js';
-import { SCHEMA_VERSION, STORAGE_KEY, DAY, kindFor, createState, prepareState, validateState, exportObject, activeEntries, isDue, schedule, recordReview, recordSpelling, checkSpelling, makeQueue, stats } from './core.js';
+import { SCHEMA_VERSION, STORAGE_KEY, DAY, NEW_PER_DAY_OPTIONS, kindFor, createState, prepareState, validateState, exportObject, activeEntries, isDue, schedule, recordReview, recordSpelling, checkSpelling, makeQueue, stats } from './core.js';
 import { BOOKS, LESSON_MODULES, lessonKey, lessonFields, parseEntryLines, parseLessonText, planLessonImport } from './curriculum.js';
 import { COURSE_PAGES, courseSourcePage, courseHeading, courseLessonText } from './curriculum-ui.js';
 import { KLAIRE_REVIEW_TOPICS } from './klaire-review.js';
 import { REVIEW_SCENES, focusTopicForCard, lastFocusTopic, makeHomeReviewPlan, nextScheduledReview, recentlyStuck } from './review-dashboard.js';
 import { GRAMMAR_BRANCHES, TENSE_TIMELINES, renderGrammarMap } from './grammar-map.js';
-import { GUIDE_VIEWS, PEOPLE, guideAudio, renderPhoneticGuide } from './grammar-reference.js';
+import { GUIDE_VIEWS, PEOPLE, guideAudio, phonemeAudioUrl, renderPhoneticGuide } from './grammar-reference.js';
 import { CLAUSE_GROUPS } from './grammar-clauses.js';
 import { guidanceForCard } from './grammar-guidance.js';
 import { GRAMMAR_BREAKDOWNS } from './grammar-breakdowns.js';
@@ -17,6 +17,7 @@ import { createCloud } from './cloud.js';
 const $ = s => document.querySelector(s);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const svgPaths = {
+  list:'<path d="M9 6h12M9 12h12M9 18h12M3 6h1m-1 6h1m-1 6h1"/>',
   letters:'<path d="m2 18 5-12 5 12M4 14h6m10 4v-5a3 3 0 0 0-6-1m6 3h-3.5a1.5 1.5 0 0 0 0 3H20"/>',
   syntax:'<rect x="9" y="3" width="6" height="5" rx="1"/><path d="M12 8v4m-7 4v-4h14v4"/><rect x="2" y="16" width="6" height="5" rx="1"/><rect x="16" y="16" width="6" height="5" rx="1"/>',
   sprout:'<path d="M12 21v-9M12 16C3 16 3 6 3 6s10-1 9 10ZM12 12C12 3 21 3 21 3s2 9-9 9Z"/>',
@@ -64,9 +65,9 @@ const commonModules=['nce1','nce2'];
 const phraseModules=['daily','travel',...commonModules];
 const sections=[
   ['home','home','首页'],
-  ['grammar','syntax','语法','时态与语法'],
   ['words','letters','单词'],
   ['phrases','chat','短语'],
+  ['grammar','syntax','语法','时态与语法'],
   ['course','book','教材','新概念教材'],
   ['settings','settings','设置','备份与设置']
 ];
@@ -87,7 +88,7 @@ let upgradeRaw = null;
 let state;
 // Accessing localStorage itself can throw in a restricted browser.
 let repository;
-let cloud = null;
+let cloud;
 let accountContext = 0;
 try {
   repository = new BrowserRepository(window.localStorage);
@@ -111,6 +112,7 @@ let confirmAction = null;
 let toastTimer;
 let undoAction = null;
 let voices = [];
+let phonemePlayer;
 const entryTitle=e=>e?.kind==='grammar'?e.title:e?.en||'';
 const entryMeaning=e=>e?.kind==='grammar'?e.explanation:e?.zh||'';
 const lines=text=>esc(text).replace(/\n/g,'<br>');
@@ -137,7 +139,7 @@ function commit(change) {
   if (corruptRaw !== null) { storageOK = false; toast('原来的记录格式异常。本次修改仅暂存，请先下载备份。'); return; }
   try { if(upgradeRaw!==null){repository.upgradeWithBackup(state,upgradeRaw);upgradeRaw=null;}else repository.save(state); storageOK = true; }
   catch { storageOK = false; toast('浏览器未能保存。修改暂存在当前页面，请立即下载备份。'); }
-  if(storageOK)cloud?.changed();
+  if (storageOK) cloud?.changed();
 }
 function toast(message, undo) {
   clearTimeout(toastTimer); undoAction = undo || null;
@@ -185,9 +187,9 @@ function referenceFeatureContent(ic,title,description) {
   return `<span class="reference-feature-icon">${icon(ic)}</span><span class="reference-feature-copy"><strong>${title}</strong><span>${description}</span></span>${icon('chevron','reference-feature-chevron')}`;
 }
 const librarySections=[
-  ['grammar','时态与语法','导图、时态时间轴与语法卡','个知识点',['grammar']],
   ['words','我的手写生词本','手写生词、常用搭配与音标','个单词与词组',['words']],
-  ['phrases','短语','日常、旅游与新概念常用短语','条常用短语',phraseModules]
+  ['phrases','短语','日常、旅游与新概念常用短语','条常用短语',phraseModules],
+  ['grammar','时态与语法','导图、时态时间轴与语法卡','个知识点',['grammar']]
 ];
 function linkSection(title, links, description='') {
   return `<section class="catalog-section"><h2>${title}</h2>${description?`<p>${description}</p>`:''}${moduleLinks(links)}</section>`;
@@ -453,12 +455,12 @@ function render() {
       <div class="local-label"><span class="status-dot ${!storageOK?'bad':''}"></span>${storageOK?'记录保存在本机':'请备份当前记录'}</div>
     </aside>
     <div class="workspace"><header class="topbar"><span class="mobile-brand">${icon('book')} Klaire</span><span class="breadcrumb">${pageName(current)}</span>
-      <div class="topbar-right"><span class="local-chip">${icon('shield')} <span data-cloud-chip>本机保存</span></span></div></header>
+      <div class="topbar-right"><span class="local-chip">${icon('shield')} 本地版</span></div></header>
     <main id="main" tabindex="-1">
       ${!storageOK ? `<div class="storage-warning" role="alert">${icon('info')}<div><strong>${corruptRaw!==null?'检测到原来的记录格式异常，已保留原文。':'当前修改尚未可靠保存。'}</strong><p>${corruptRaw!==null?'当前展示初始词表；请先下载原始记录和当前备份，再恢复有效备份。':'请不要关闭页面，先下载备份。可能是浏览器禁止保存或存储空间不足。'}</p></div><button class="btn small" data-action="export">下载当前备份</button>${corruptRaw!==null?'<button class="btn small" data-action="export-raw">下载原始记录</button>':''}</div>`:''}
       ${parent?`<div class="page-back"><button type="button" class="text-button" data-action="back-to-parent">${icon('back')} 返回${pageName(parent)}</button></div>`:''}
       ${content}
-    </main><footer class="page-footer"><span>Klaire's Project · 本机备份与账号云端保存</span><span>Klaire · 3.10.0</span></footer></div>
+    </main><footer class="page-footer"><span>学习记录保存在当前浏览器</span><span>Klaire · 本地版 3.10.0</span></footer></div>
     <nav class="mobile-nav" aria-label="手机导航">${nav(true)}</nav>`;
   cloud?.publish();
 }
@@ -501,6 +503,7 @@ function renderHome(s) {
         <div class="collection-top"><span class="collection-icon">${icon('book')}</span></div><h3>新概念教材</h3><p>课文、逐课单词和短语</p>
         <div class="collection-count">${icon('chevron')}</div><div class="textbook-card-rule" aria-hidden="true"></div><div class="collection-bottom"><span>一册 · ${BOOKS[1].count} 课</span><span>二册 · ${BOOKS[2].count} 课</span></div>
       </button></section>
+      <div><button type="button" class="text-button" data-nav="settings">${icon('settings')} 备份与设置</button></div>
     </div>
     ${recentEntry?`<section class="panel home-recent"><h2>最近学习</h2><button class="last-entry" data-action="detail" data-id="${recentEntry.id}">${esc(entryTitle(recentEntry))} ${icon('arrow')}</button></section>`:''}`;
 }
@@ -525,10 +528,13 @@ function renderLibraryIndexControls(module,pending) {
   const activeFilters=[ui.book,ui.category,ui.filter].filter(value=>value!=='all').length;
   return `<section class="panel library-index-controls" aria-labelledby="library-heading">
     <div class="library-index-heading">
-      <div><h2 id="library-heading">${isWords?'词表':'语法目录'}</h2><span id="result-summary" aria-live="polite">${resultSummary()}</span></div>
-      <button type="button" class="text-button" data-action="add" aria-label="新增${isWords?'单词':'语法卡'}">${icon('plus')} 新增</button>
-      ${isWords?`<button type="button" class="text-button" data-action="start-spelling" aria-label="拼写练习">${icon('keyboard')} 拼写</button>`:''}
-      <button type="button" class="btn primary" data-action="start-review" data-module="${module}" aria-label="复习当前范围">复习</button>
+      <span class="reference-feature-icon">${icon(isWords?'letters':'list')}</span>
+      <div><h2 id="library-heading">${isWords?'词条':'语法目录'}</h2><span id="result-summary" aria-live="polite">${resultSummary()}</span></div>
+    </div>
+    <div class="library-index-actions" role="group" aria-label="${isWords?'词条操作':'语法目录操作'}">
+      <button type="button" class="btn primary" data-action="start-review" data-module="${module}" aria-label="复习当前范围">${icon('refresh')} 复习</button>
+      ${isWords?`<button type="button" class="btn" data-action="start-spelling" aria-label="拼写练习">${icon('keyboard')} 拼写</button>`:''}
+      <button type="button" class="btn" data-action="add" aria-label="新增${isWords?'单词':'语法卡'}">${icon('plus')} 新增</button>
     </div>
     <div class="library-index-search">
       <label class="search-box">${icon('search')}<input id="library-search" type="search" placeholder="${isWords?'搜索单词、搭配或备注':'搜索知识点、例句或备注'}" value="${esc(ui.search)}" aria-label="${isWords?'搜索单词':'搜索语法知识点'}"></label>
@@ -551,7 +557,7 @@ function renderLibrary(module) {
       <button type="button" class="reference-feature" data-action="open-grammar-view" data-view="overview">${referenceFeatureContent('syntax','语法导图','按主题查看语法知识点')}</button>
       <div class="grammar-shortcuts" role="group" aria-label="语法查阅入口">${GUIDE_VIEWS.filter(([id])=>id!=='overview').map(([id,label])=>`<button type="button" class="btn" data-action="open-grammar-view" data-view="${id}">${label}</button>`).join('')}</div>
     </section>`:''}
-    ${isWords?`<section class="reference-block" aria-label="发音查阅"><button type="button" class="reference-feature" data-nav="pronunciation">${referenceFeatureContent('speaker','音标与发音','44 个英式音标 · 点读例词')}</button></section>`:''}
+    ${isWords?`<section class="reference-block" aria-label="发音查阅"><button type="button" class="reference-feature" data-nav="pronunciation">${referenceFeatureContent('speaker','音标与发音','44 个英式音标 · 单听发音和例词')}</button></section>`:''}
     ${usesLibraryIndex(module)?renderLibraryIndexControls(module,pending):`<section class="panel library-controls" aria-labelledby="library-heading">
       <h2 id="library-heading">短语列表</h2>
       <div class="library-tools"><label class="search-box">${icon('search')}<input id="library-search" type="search" placeholder="搜索英文、中文或备注" value="${esc(ui.search)}" aria-label="搜索学习内容"></label><button type="button" class="btn" data-action="add">${icon('plus')} 新增短语</button></div>
@@ -689,7 +695,7 @@ function renderSettings(s) {
   const trash=state.entries.filter(e=>e.deletedAt);
   let previous=false,upgrade=false;try{previous=!!repository.previousRaw();upgrade=!!repository.beforeUpgradeRaw();}catch{}
   return `<section class="page-heading library-heading"><div><h1>备份与设置</h1></div></section>
-    ${cloud?.panel()||''}
+    ${cloud?.panel() || ''}
     <section class="panel backup-panel"><div class="panel-heading">${icon('download')}<div><h2>学习记录备份</h2><p>换设备或清理浏览器前，请先下载一份。</p></div></div>
       <div class="backup-content"><div><div class="backup-summary"><span><strong>${s.total}</strong> 条学习内容</span><span><strong>${state.activities.length}</strong> 次练习记录</span></div>
       <p>备份包含课文、词条、笔记、收藏、进度和设置。恢复会先显示备份内容供你确认。</p>
@@ -698,7 +704,7 @@ function renderSettings(s) {
       <div class="backup-aside">${icon('shield')}<strong>存在当前浏览器</strong><p>更换设备时，可以把备份导入新设备。</p></div></div>
     </section>
     <div class="settings-grid"><section class="panel settings-panel"><div class="panel-heading">${icon('sprout')}<div><h2>学习偏好</h2><p>设置每日新内容数量和回忆方向。</p></div></div>
-      <label class="setting-row"><span><strong>每天学习的新内容</strong><small>各学习模块共用每日额度。到期复习不受此限制。</small></span><select data-setting="newPerDay">${[5,10,20,30].map(n=>`<option value="${n}" ${state.settings.newPerDay===n?'selected':''}>${n} 条 / 天</option>`).join('')}</select></label>
+      <label class="setting-row"><span><strong>每天学习的新内容</strong><small>各学习模块共用每日额度。到期复习不受此限制。</small></span><select data-setting="newPerDay">${NEW_PER_DAY_OPTIONS.map(option=>`<option value="${option}" ${state.settings.newPerDay===option?'selected':''}>${option==='unlimited'?'无限制':`${option} 条 / 天`}</option>`).join('')}</select></label>
       <label class="setting-row"><span><strong>默认回忆方向</strong><small>单词、短语可切换；语法采用知识点回忆。</small></span><select data-setting="direction"><option value="en-zh" ${state.settings.direction==='en-zh'?'selected':''}>看英文想中文</option><option value="zh-en" ${state.settings.direction==='zh-en'?'selected':''}>看中文想英文</option></select></label>
       <div class="setting-note">${icon('info')}“记住了”按1、3、7、14、30天递进；“模糊”次日复习，“忘了”10分钟后复习并重置间隔。</div>
     </section><section class="panel settings-panel"><div class="panel-heading">${icon('speaker')}<div><h2>发音与口音</h2><p>音标统一显示英式；朗读可以切换。</p></div></div>
@@ -706,7 +712,7 @@ function renderSettings(s) {
       <label class="voice-label" for="voice-select">本机声音</label><select id="voice-select" data-setting="voiceURI" ${!matching.length?'disabled':''}>${matching.length?`<option value="">自动选择本机声音</option>${matching.map(v=>`<option value="${esc(v.voiceURI)}" ${v.voiceURI===state.settings.voiceURI?'selected':''}>${esc(v.name)}</option>`).join('')}`:'<option>未找到对应口音的本机声音</option>'}</select>
       <div class="voice-test"><button class="btn small" data-action="test-voice">${icon('speaker')} 试听一句</button><span class="subtle">This is an English pronunciation test.</span></div><p class="fine-print">若没有声音，请先在系统设置中安装对应英语语音包，再重开浏览器。此版本不使用网络声音，不自动换成其他口音，也不调用付费朗读服务。</p>
     </section></div>
-    <div class="settings-grid"><section class="panel info-panel"><h2>${icon('trash')} 回收站 <span class="count-badge">${trash.length}</span></h2><p>删除的内容先保留在这里，不参与学习；恢复后保留原有进度。</p>${trash.length?`<div class="trash-list">${trash.map(e=>`<div><span>${esc(entryTitle(e))}<small>${modules[e.module].title}</small></span><button class="text-button" data-action="restore-entry" data-id="${e.id}">${icon('refresh')} 恢复</button></div>`).join('')}</div>`:'<div class="empty-small">回收站为空。</div>'}</section><section class="panel info-panel"><h2>${icon('book')} 使用小贴士</h2><ul class="tips-list"><li>使用本地启动入口，保持 <strong>http://localhost:4173</strong> 和同一个浏览器。更换网址或浏览器后，需要导入备份。</li><li>请勿使用无痕模式保存长期学习记录；清除浏览器数据会影响本机记录。</li><li>照片转录、中文释义和音标是整理稿，请逐步核对；你新增的音标需要自己填写。</li><li>手机可打开正式网址并用同一邮箱找回已同步记录。本地启动只开放给这台电脑。</li></ul></section></div>`;
+    <div class="settings-grid"><section class="panel info-panel"><h2>${icon('trash')} 回收站 <span class="count-badge">${trash.length}</span></h2><p>删除的内容先保留在这里，不参与学习；恢复后保留原有进度。</p>${trash.length?`<div class="trash-list">${trash.map(e=>`<div><span>${esc(entryTitle(e))}<small>${modules[e.module].title}</small></span><button class="text-button" data-action="restore-entry" data-id="${e.id}">${icon('refresh')} 恢复</button></div>`).join('')}</div>`:'<div class="empty-small">回收站为空。</div>'}</section><section class="panel info-panel"><h2>${icon('book')} 使用小贴士</h2><ul class="tips-list"><li>使用本地启动入口，保持 <strong>http://localhost:4173</strong> 和同一个浏览器。更换网址或浏览器后，需要导入备份。</li><li>请勿使用无痕模式保存长期学习记录；清除浏览器数据会影响本机记录。</li><li>照片转录、中文释义和音标是整理稿，请逐步核对；你新增的音标需要自己填写。</li><li>手机正式网址和 Supabase 接入留给下一阶段。本地启动只开放给这台电脑。</li></ul></section></div>`;
 }
 
 function openModal(html, wide=false) {
@@ -871,14 +877,13 @@ function courseImportDialog() {
 
 async function readCourseFile(file) {
   if(!file)return;
-  const context=accountContext;
   try {
     if(file.size>10*1024*1024)throw new Error('教材文件超过10MB，请分批导入。');
     const form=$('#course-import-form');
     if(!form)return;
     const values=new FormData(form);
     const text=(await file.text()).replace(/^\uFEFF/,'');
-    if(context!==accountContext||form!==$('#course-import-form'))return;
+    if(form!==$('#course-import-form'))return;
     const lessons=/\.json$/i.test(file.name)
       ? JSON.parse(text)?.lessons
       : parseLessonText(text,Number(values.get('book')),String(values.get('source')||''));
@@ -897,14 +902,15 @@ function stamp() {return new Date().toISOString().replace(/[:.]/g,'-');}
 function exportBackup() {download(JSON.stringify(exportObject(state),null,2),`Klaire-完整备份-${stamp()}.json`);toast('备份已交给浏览器下载，请在“下载”中确认文件已保存。');}
 async function inspectBackup(file) {
   if(!file)return;
-  const context=accountContext;
   if(file.size>10*1024*1024){toast('备份超过10MB，本版本暂不支持。当前数据没有改变。');return;}
   try {
-    const text=await file.text();if(context!==accountContext)return;
-    const parsed=JSON.parse(text),prepared=prepareState(parsed,SEED_ENTRIES);pendingRestore=prepared.state;
+    const context=accountContext;
+    const raw=await file.text();
+    if (context!==accountContext) return;
+    const parsed=JSON.parse(raw),prepared=prepareState(parsed,SEED_ENTRIES);pendingRestore=prepared.state;
     const s=stats(pendingRestore);
     showConfirm('恢复这份学习备份？',`<div class="import-preview"><strong>备份原有 ${parsed.entries.length} 条（含回收站），将补充 ${prepared.addedCount} 条内置内容</strong><p>第${prepared.fromVersion}版备份 → 第${SCHEMA_VERSION}版。恢复后 ${s.total} 条有效词条 · ${s.studied} 条已学习 · ${Object.keys(pendingRestore.lessons).length} 课个人资料。</p><p>${pendingRestore.activities.length} 次练习记录，${pendingRestore.entries.filter(e=>e.deletedAt).length} 条回收站内容。</p><p>备份导出时间：${parsed.exportedAt&&!Number.isNaN(Date.parse(parsed.exportedAt))?esc(new Date(parsed.exportedAt).toLocaleString('zh-CN')):'未提供'}</p></div><p>恢复将<strong>替换当前记录</strong>，不自动合并。继续时会先下载当前副本，并在本机保留一份恢复前副本，便于找回。</p>`,'先备份，再恢复',performRestore);
-  }catch(e){if(context!==accountContext)return;pendingRestore=null;openModal(`<div class="modal-icon">${icon('info')}</div><h2 id="dialog-title">这份备份暂时无法恢复</h2><p>${esc(e instanceof SyntaxError?'文件不是有效的 JSON 学习备份。':e.message)}</p><p>当前词表和学习记录没有改变。请使用本网页“下载完整备份”产生的文件。</p><button class="btn primary" data-action="close-dialog">知道了</button>`);}
+  }catch(e){pendingRestore=null;openModal(`<div class="modal-icon">${icon('info')}</div><h2 id="dialog-title">这份备份暂时无法恢复</h2><p>${esc(e instanceof SyntaxError?'文件不是有效的 JSON 学习备份。':e.message)}</p><p>当前词表和学习记录没有改变。请使用本网页“下载完整备份”产生的文件。</p><button class="btn primary" data-action="close-dialog">知道了</button>`);}
 }
 function performRestore() {
   if(!pendingRestore)return;
@@ -922,7 +928,25 @@ function updateVoices() {
   voices='speechSynthesis' in window?speechSynthesis.getVoices().filter(v=>v.localService&&/^en[-_]/i.test(v.lang)):[];
   if(ui.page==='settings'&&!$('#dialog').open)render();
 }
+function stopPhoneme() {
+  phonemePlayer?.pause();
+  phonemePlayer=undefined;
+}
+
+function playPhoneme(sound) {
+  const url=phonemeAudioUrl(sound);
+  if(!url)return;
+  window.speechSynthesis?.cancel();
+  stopPhoneme();
+  const player=new Audio(url);
+  phonemePlayer=player;
+  player.play().catch(()=>{
+    if(phonemePlayer===player)toast('音标发音播放失败，请刷新页面后再试。');
+  });
+}
+
 function speak(text,slow=false) {
+  stopPhoneme();
   if(!('speechSynthesis' in window)){toast('当前浏览器不支持朗读，请换用支持朗读的浏览器。');return;}
   updateVoices();
   const matching=voices.filter(v=>v.lang.toLowerCase()===state.settings.accent.toLowerCase());
@@ -937,7 +961,7 @@ document.addEventListener('click',event=>{
   const b=event.target.closest('[data-action], [data-nav]');if(!b||b.disabled)return;
   if(b.dataset.nav){navigate(b.dataset.nav);return;}
   const action=b.dataset.action,id=b.dataset.id;
-  if(action.startsWith('cloud-')){void cloud?.action(action,id);return;}
+  if (action?.startsWith('cloud-')) { void cloud.action(action,id); return; }
   if(action==='close-dialog')$('#dialog').close();
   else if(action==='back-to-parent')backToParent();
   else if(action==='open-grammar-view'&&GUIDE_VIEWS.some(([id])=>id===b.dataset.view)){
@@ -981,6 +1005,7 @@ document.addEventListener('click',event=>{
     render();
     $('.ipa-speed [aria-pressed="true"]')?.focus({preventScroll:true});
   }
+  else if(action==='phoneme-speak')playPhoneme(b.dataset.sound);
   else if(action==='guide-speak'&&b.dataset.text)speak(b.dataset.text,b.dataset.slow==='true');
   else if(action==='open-study-scene'&&ui.page==='words'&&STUDY_WORD_GROUPS.some(group=>group.id===b.dataset.scene)){
     sceneView.id=b.dataset.scene;
@@ -1090,7 +1115,17 @@ document.addEventListener('change',event=>{
     return;
   }
   if(el.dataset.scope){ui[el.dataset.scope]=el.value;ui.limit=defaultListLimit(ui.page);render();$('#'+el.id)?.focus({preventScroll:true});}
-  if(el.dataset.setting){commit(next=>{next.settings[el.dataset.setting]=el.dataset.setting==='newPerDay'?Number(el.value):el.value;if(el.dataset.setting==='accent')next.settings.voiceURI='';});render();}
+  if(el.dataset.setting){
+    const setting=el.dataset.setting;
+    const value=setting==='newPerDay'?NEW_PER_DAY_OPTIONS.find(option=>String(option)===el.value):el.value;
+    if(value!==undefined){
+      commit(next=>{
+        next.settings[setting]=value;
+        if(setting==='accent')next.settings.voiceURI='';
+      });
+      render();
+    }
+  }
   if(el.id==='backup-file')inspectBackup(el.files[0]);
   if(el.id==='course-file')readCourseFile(el.files[0]);
   if(el.id==='course-book'||el.id==='course-lesson'){
@@ -1100,7 +1135,16 @@ document.addEventListener('change',event=>{
   }
 });
 document.addEventListener('submit',event=>{
-  if(event.target.id==='cloud-login'){event.preventDefault();void cloud?.login(event.target);return;}
+  if (['cloud-login','cloud-password-set'].includes(event.target.id)) {
+    event.preventDefault();
+    const form = event.target;
+    if (form.id === 'cloud-login' && event.submitter?.hasAttribute('data-email-login')) {
+      if (form.elements.namedItem('email').reportValidity()) void cloud.login(form);
+    } else {
+      void cloud.password(form);
+    }
+    return;
+  }
   if(event.target.id==='entry-form'){event.preventDefault();saveEntry(event.target);}
   else if(event.target.id==='grammar-form'){event.preventDefault();saveGrammar(event.target);}
   else if(event.target.id==='spelling-form'){event.preventDefault();answerSpelling();}
@@ -1136,7 +1180,7 @@ document.addEventListener('keydown',event=>{
   if(s.flipped&&option){event.preventDefault();rate(option.id);}
 });
 window.addEventListener('storage',event=>{
-  if(cloud?.isAccount())return;
+  if (cloud?.isAccount()) return;
   if(event.key!==STORAGE_KEY)return;
   if(!event.newValue){storageOK=false;render();toast('另一个页面清除了记录。当前内容还在，请下载备份。');return;}
   try{const prepared=prepareState(JSON.parse(event.newValue),SEED_ENTRIES);state=prepared.state;upgradeRaw=null;storageOK=true;if(prepared.changed){try{repository.upgradeWithBackup(state,event.newValue);}catch{upgradeRaw=event.newValue;storageOK=false;}}corruptRaw=null;if($('#dialog').open)$('#dialog').close();ui.session=null;if(ui.page==='practice'){ui.page='home';returnViews.length=0;}render();toast('已同步同一浏览器内另一个标签页的修改。');}
@@ -1144,17 +1188,26 @@ window.addEventListener('storage',event=>{
 });
 window.addEventListener('beforeunload',event=>{if(!storageOK){event.preventDefault();event.returnValue='';}});
 if('speechSynthesis' in window)speechSynthesis.addEventListener('voiceschanged',updateVoices);
+const canSwitchAccount=()=>storageOK&&corruptRaw===null&&!$('#dialog').open&&(!ui.session||ui.session.done);
 cloud=createCloud({
   guestRepository:repository,
-  safeToLeave:()=>storageOK&&corruptRaw===null&&!$('#dialog').open&&(!ui.session||ui.session.done),
-  canReplace:()=>storageOK&&corruptRaw===null&&!$('#dialog').open&&(!ui.session||ui.session.done),
+  safeToLeave:canSwitchAccount,
+  canReplace:canSwitchAccount,
   replace(nextRepository,nextState){
-    accountContext++;closeOpenDialog();confirmAction=null;pendingRestore=null;undoAction=null;
-    $('#backup-file').value='';$('#course-file').value='';window.speechSynthesis?.cancel();
-    ui.session=null;if(ui.page==='practice')ui.page='home';returnViews.length=0;
-    repository=nextRepository;state=nextState;corruptRaw=null;upgradeRaw=null;storageOK=true;
+    accountContext++;
+    closeOpenDialog();
+    pendingRestore=null;
+    confirmAction=null;
+    undoAction=null;
+    ui.session=null;
+    if(ui.page==='practice')ui.page='home';
+    returnViews.length=0;
+    repository=nextRepository;
+    state=nextState;
+    corruptRaw=null;
+    upgradeRaw=null;
   },
-  receive(nextState){state=nextState;upgradeRaw=null;corruptRaw=null;storageOK=true;render();},
+  receive(nextState){state=nextState;render();},
   render,toast,download,backup:exportBackup,confirm:showConfirm,modal:openModal,close:closeOpenDialog
 });
 $('#dialog').addEventListener('close',()=>cloud.schedule());

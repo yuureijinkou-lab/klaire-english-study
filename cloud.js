@@ -11,6 +11,7 @@ const summary=s=>`${s.entries.filter(e=>!e.deletedAt).length} 条内容 · ${s.a
 export function createCloud(host) {
   let account=null,session=null,engine=null,repo=null,client=null,generation=0,timer=null,message='',authBusy=false;
   let pendingSession=null;
+  const authFeedback={login:null,password:null};
   const guest=host.guestRepository;
   const active=()=>!!account&&session?.user?.id===account.id;
   const publish=()=>{
@@ -20,6 +21,14 @@ export function createCloud(host) {
     document.querySelectorAll('[data-cloud-member]').forEach(el=>{el.hidden=!account;});
     document.querySelectorAll('[data-cloud-guest]').forEach(el=>{el.hidden=!!account&&active();});
     document.querySelectorAll('[data-cloud-connected]').forEach(el=>{el.disabled=!active();});
+    document.querySelectorAll('[data-cloud-auth-submit]').forEach(el=>{
+      el.disabled=authBusy||!client||(el.hasAttribute('data-cloud-connected')&&!active());
+    });
+    document.querySelectorAll('[data-cloud-auth-feedback]').forEach(el=>{
+      const feedback=authFeedback[el.dataset.cloudAuthFeedback];
+      el.textContent=feedback?.text||'';
+      el.toggleAttribute('data-error',!!feedback?.error);
+    });
     const chip=document.querySelector('[data-cloud-chip]');if(chip)chip.textContent=account?(active()&&engine?.status==='saved'?'云端已保存':'账号本机副本'):'本机保存';
     if(pendingSession&&host.safeToLeave())schedule(0);
   };
@@ -46,6 +55,8 @@ export function createCloud(host) {
   function switchAccount(user) {
     if(!host.safeToLeave()){pendingSession=user;message='账号切换已等待：请先完成当前编辑或复习，并确认修改已保存。';publish();return false;}
     generation++;engine=null;pendingSession=null;message='';
+    authFeedback.login=null;
+    authFeedback.password=null;
     if(user){
       try {
         const nextRepo=new JournalRepository(localStorage,user.id),raw=nextRepo.loadRaw();
@@ -84,6 +95,7 @@ export function createCloud(host) {
     if(!window.supabase?.createClient){message='云端组件未加载，本机学习和备份仍可使用。';publish();return;}
     try{
       client=window.supabase.createClient(CLOUD_URL,CLOUD_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+      publish();
       let authEvents=0;
       client.auth.onAuthStateChange((event,next)=>{
         authEvents++;if(event==='INITIAL_SESSION'&&!next)return;
@@ -96,15 +108,80 @@ export function createCloud(host) {
     }catch{message='暂时无法连接云端。请保留本机备份，联网后重试。';publish();}
   }
   function panel(){return `<section class="panel backup-panel cloud-panel"><div class="panel-heading"><div><h2>账号与云端保存</h2><p>Klaire's Project · 英语学习，和浅草健身独立。</p></div></div><div class="cloud-content"><strong data-cloud-account>${esc(account?.email||'尚未登录')}</strong><p data-cloud-status role="status" aria-live="polite"></p>
-    <form id="cloud-login" data-cloud-guest ${account&&active()?'hidden':''}><label for="cloud-email">邮箱</label><div class="cloud-login-row"><input id="cloud-email" name="email" type="email" autocomplete="email" required placeholder="你的邮箱"><button class="btn primary" type="submit">发送登录邮件</button></div><p class="fine-print">打开邮件里的登录链接后回到此页。首次登录不会自动覆盖本机记录。</p></form>
+    <form method="post" id="cloud-login" class="cloud-auth-form" data-cloud-guest ${active()?'hidden':''}>
+      <label class="cloud-auth-field" for="cloud-email">邮箱
+        <input id="cloud-email" type="email" name="email" required autocomplete="username">
+      </label>
+      <label class="cloud-auth-field" for="cloud-password">密码
+        <input id="cloud-password" type="password" name="password" required autocomplete="current-password">
+      </label>
+      <div class="cloud-auth-actions">
+        <button class="btn primary" type="submit" data-cloud-auth-submit>用密码登录</button>
+        <button class="btn" type="submit" formnovalidate data-email-login data-cloud-auth-submit>发送登录邮件</button>
+      </div>
+      <p class="cloud-auth-note">首次设置密码或忘记密码时，只填邮箱就可以发送登录邮件。</p>
+      <p class="cloud-auth-feedback" data-cloud-auth-feedback="login" role="status" aria-atomic="true"></p>
+    </form>
+    <form method="post" id="cloud-password-set" class="cloud-auth-form" data-cloud-member hidden>
+      <label class="cloud-auth-field" for="cloud-new-password">新密码
+        <input id="cloud-new-password" type="password" name="password" required minlength="8" autocomplete="new-password" data-cloud-connected>
+      </label>
+      <div class="cloud-auth-actions"><button class="btn" type="submit" data-cloud-connected data-cloud-auth-submit>设置或更改密码</button></div>
+      <p class="cloud-auth-feedback" data-cloud-auth-feedback="password" role="status" aria-atomic="true"></p>
+    </form>
     <div class="button-row" data-cloud-member ${!account?'hidden':''}><button class="btn" type="button" data-action="cloud-sync" data-cloud-connected>立即同步</button><button class="btn" type="button" data-action="cloud-upload" data-cloud-connected>上传本机记录</button><button class="btn" type="button" data-action="cloud-conflict" data-cloud-connected>查看不同版本</button><button class="btn" type="button" data-action="cloud-history" data-cloud-connected>云端历史备份</button><button class="text-button" type="button" data-action="cloud-logout">退出账号</button></div><p class="fine-print">只有显示「已保存到云端」的内容才能在清理缓存后找回。离线草稿和本机副本仍需要导出备份。不同版本会让你选择，覆盖前保留副本。</p></div></section>`;}
   async function login(form) {
-    if(authBusy||!client)return;authBusy=true;
-    const email=String(new FormData(form).get('email')||'').trim();message='正在发送登录邮件…';publish();
-    try{const {error}=await client.auth.signInWithOtp({email,options:{emailRedirectTo:new URL('./',location.href).href}});if(error)throw error;
-      message='登录邮件已发送，请打开邮件里的链接。若未收到，请查看垃圾邮件或稍后重试。';
-    }catch(error){message=error?.status===429?'邮件发送过于频繁，请稍后重试。':'登录邮件未发送成功。请检查邮箱、网络或邮件服务配置；当前记录仍保留。';}
-    finally{authBusy=false;publish();}
+    if (authBusy || !client) return;
+    const email = String(new FormData(form).get('email') || '').trim();
+    authBusy = true;
+    authFeedback.login = {text:'正在发送登录邮件…'};
+    publish();
+    try {
+      const {error}=await client.auth.signInWithOtp({email,options:{emailRedirectTo:new URL('./',location.href).href}});
+      if (error) throw error;
+      authFeedback.login = {text:'登录邮件已发送。请打开邮件里的链接。'};
+    } catch (error) {
+      authFeedback.login = {error:true,text:error?.status===429
+        ? '邮件发送过于频繁，请稍后重试。'
+        : '登录邮件未发送成功。请检查邮箱或网络后重试。'};
+    } finally {
+      authBusy = false;
+      publish();
+    }
+  }
+  async function password(form) {
+    if (authBusy || !client) return;
+    const setting = form.id === 'cloud-password-set';
+    if (setting && !active()) return;
+    const feedbackKey = setting ? 'password' : 'login';
+    const accountId = account?.id;
+    const fields = new FormData(form);
+    const password = String(fields.get('password') || '');
+    const email = String(fields.get('email') || '').trim();
+    form.elements.namedItem('password').value = '';
+    authBusy = true;
+    authFeedback[feedbackKey] = {text:setting ? '正在保存密码…' : '正在登录…'};
+    publish();
+    try {
+      const result = setting
+        ? await client.auth.updateUser({password})
+        : await client.auth.signInWithPassword({email, password});
+      if (result.error) throw result.error;
+      if (setting && account?.id===accountId) {
+        authFeedback.password = {text:'密码已保存。下次可以用同一邮箱和密码登录。'};
+      } else if (!setting) {
+        authFeedback.login = null;
+      }
+    } catch (error) {
+      if (account?.id===accountId) {
+        authFeedback[feedbackKey] = {error:true,text:setting
+          ? '设置密码失败。请用邮件链接重新登录，或试一个更长的密码。'
+          : '密码登录失败。请核对密码，或点「发送登录邮件」。'};
+      }
+    } finally {
+      authBusy = false;
+      publish();
+    }
   }
   async function action(name,id) {
     try{
@@ -153,6 +230,6 @@ export function createCloud(host) {
   window.addEventListener('focus',()=>schedule(0));
   window.addEventListener('storage',event=>{if(event.key?.startsWith('klaire.study/'))schedule(300);});
   setInterval(()=>{if(active()&&!document.hidden)schedule(0);},20000);
-  return {initialize,panel,publish,action,login,schedule,get account(){return account;},get generation(){return generation;},
+  return {initialize,panel,publish,action,login,password,schedule,get account(){return account;},get generation(){return generation;},
     changed(){if(engine){engine.setStatus('pending');schedule();}},isAccount:()=>!!account};
 }
