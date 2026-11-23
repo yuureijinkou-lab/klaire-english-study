@@ -218,11 +218,11 @@ function phrases(text, module) {
       source:'基础短语 · 整理稿', sourceNote:'音标为英式宽式标音；实际连读和弱读会随语境变化。', notes:'', favorite:false, needsCheck:false, deletedAt:0 };
   });
 }
-import { GRAMMAR_ENTRIES, NCE1_PHRASES } from './learning-data.js';
+import { GRAMMAR_ENTRIES, NCE1_PHRASES } from './learning-data.js?v=20261124';
 import { NCE2_COMMON } from './book2-common.js';
-import { KLAIRE_REVIEW_ENTRIES } from './klaire-review.js';
+import { KLAIRE_REVIEW_ENTRIES } from './klaire-review.js?v=20261124';
 import { BASIC_WORDS } from './basic-words.js';
-import { ADVANCED_TIMELINE_CARD } from './grammar-guidance.js';
+import { ADVANCED_TIMELINE_CARD } from './grammar-guidance.js?v=20261124';
 import { EXPANDED_GRAMMAR } from './grammar-expansion.js';
 import { STUDY_WORDS } from './study-groups.js';
 export const SEED_ENTRIES = [...words(photoOne,'a'), ...words(photoTwo,'b'), ...phrases(daily,'daily'), ...phrases(travel,'travel'), ...NCE1_PHRASES, ...GRAMMAR_ENTRIES, ...NCE2_COMMON, ...KLAIRE_REVIEW_ENTRIES, ...BASIC_WORDS, ADVANCED_TIMELINE_CARD, ...EXPANDED_GRAMMAR, ...STUDY_WORDS];

@@ -32,10 +32,17 @@ export function planWordStudyImport(entries, text, scene) {
   const byWord = new Map();
   for (const [index, raw] of text.split(/\r\n|\n|\r/).entries()) {
     if (!raw.trim()) continue;
-    const [word, pos, en1, zh1, en2, zh2, links, extra] = raw.split('｜').map(field => field.trim());
-    if (!word || !links || extra !== undefined) throw new Error(`第 ${index + 1} 行应包含单词、词性、两组例句和相关词。`);
+    const fields = raw.split('｜').map(field => field.trim());
+    const [word, pos, en1, zh1, en2, zh2, links] = fields;
+    if (!word || ![2,7].includes(fields.length)) throw new Error(`第 ${index + 1} 行请按词卡补充格式填写。`);
     const key = wordKey(word);
     if (byWord.has(key)) throw new Error(`第 ${index + 1} 行有重复单词。`);
+    if (fields.length === 2) {
+      const ipa = pos.replace(/^\/+|\/+$/g, '').trim();
+      if (!ipa || ipa.length > 500) throw new Error(`第 ${index + 1} 行的音标为空或过长。`);
+      byWord.set(key, { ipa });
+      continue;
+    }
     const related = links.split(';').map(link => {
       const separator = link.indexOf('=');
       if (separator < 1) throw new Error(`第 ${index + 1} 行的相关词请写成「英文=中文」。`);
@@ -47,8 +54,9 @@ export function planWordStudyImport(entries, text, scene) {
   const changes = new Map();
   for (const entry of entries) {
     if (entry.kind !== 'word' || entry.deletedAt || entry.needsCheck || entry.scene !== scene) continue;
-    const wordStudy = byWord.get(wordKey(entry.en));
-    if (wordStudy && JSON.stringify(entry.wordStudy) !== JSON.stringify(wordStudy)) changes.set(entry.id, wordStudy);
+    const update = byWord.get(wordKey(entry.en));
+    if (!update) continue;
+    if (update.ipa ? !entry.ipa : JSON.stringify(entry.wordStudy) !== JSON.stringify(update)) changes.set(entry.id, update);
   }
   return changes;
 }
@@ -63,6 +71,28 @@ export function studyExamples(entry) {
   return examples;
 }
 
+function glossSegments(value) {
+  // Keep punctuation inside parenthesized qualifiers together.
+  return value.normalize('NFKC').split(/[;,、\/。\n]+(?![^()]*\))/)
+    .map(part => wordKey(part).replace(/[.!?]+$/, '').trim())
+    .filter(Boolean);
+}
+
+function glossMatch(expected, actual) {
+  if (!expected.length || !actual.length) return 0;
+  if (expected.join('\n') === actual.join('\n')) return 3;
+  if (expected.some(part => actual.includes(part))) return 2;
+
+  const unqualified = part => part.replace(/\s*\([^()]*\)$/, '').trim();
+  const compatible = expected.some(left => actual.some(right => {
+    const base = unqualified(left);
+    // A bare gloss can match a qualified version. Two different qualifiers
+    // may name different senses, so don't collapse them into one.
+    return base.length >= 2 && base === unqualified(right) && (left === base || right === base);
+  }));
+  return compatible ? 1 : 0;
+}
+
 export function relatedReviewIds(entry, entries, queue) {
   const links = entry.wordStudy?.related || [];
   const queued = new Set(queue);
@@ -73,10 +103,20 @@ export function relatedReviewIds(entry, entries, queue) {
   for (const link of links) {
     const key = wordKey(link.en);
     if (queuedWords.has(key)) continue;
-    const matches = eligible.filter(card => wordKey(card.en) === key);
-    const card = matches.find(item => item.scene === entry.scene) || matches[0];
-    if (!card) continue;
-    ids.push(card.id);
+    const expected = glossSegments(link.zh);
+    let bestCard;
+    let bestRank = 0;
+    for (const card of eligible) {
+      if (wordKey(card.en) !== key) continue;
+      const quality = glossMatch(expected, glossSegments(card.zh));
+      const rank = quality ? quality * 2 + Number(card.scene === entry.scene) : 0;
+      if (rank > bestRank) {
+        bestRank = rank;
+        bestCard = card;
+      }
+    }
+    if (!bestCard) continue;
+    ids.push(bestCard.id);
     queuedWords.add(key);
   }
   return ids;

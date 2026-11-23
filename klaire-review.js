@@ -105,6 +105,18 @@ const personalCards = [
     comparison: 'I will never forget meeting her. 表示那次见面忘不了；I forgot to meet her. 表示忘了赴约。'
   },
   {
+    key: 'participle-actions', book: '二册进阶', category: '非谓语与动词搭配', title: '句末的 -ing：是谁在做？',
+    prompt: 'She put the books in the box, covering them with a towel.\ncovering 说的是谁在盖？',
+    explanation: '是 she。她先把书放进盒子里，再用毛巾盖住书。covering 补充说明她接着做的动作。',
+    structures: 'She put the books in the box and covered them with a towel.',
+    examples: [
+      ['She put the books in the box, covering them with a towel.', '她把书放进盒子里，再用毛巾盖住书。'],
+      ['She walked down the hall, carrying a box.', '她抱着一个盒子，沿走廊往前走。']
+    ],
+    mistakes: '先找主句里做动作的人。这里是 she 盖书，them 指书。',
+    comparison: '例句一可用 and covered 把先后顺序说清楚。例句二中，走和抱同时发生，可用 while she was carrying a box 表示同时。'
+  },
+  {
     key: 'participle-modifiers', book: '二册进阶', category: '非谓语与动词搭配', title: '分词作定语：从定语从句看主动与被动',
     prompt: '从被修饰的名词出发，看它发出动作还是承受动作。',
     explanation: '很多表示主动或正在发生的定语可用 -ing 短语。带被动含义的定语常用过去分词短语。可先把名词后的部分还原成定语从句核对意思。',
@@ -174,8 +186,8 @@ export const KLAIRE_REVIEW_TOPICS = [
     summary:'从真实条件复习到现在、过去和混合假设。',
     ids:['grammar-035','grammar-036','grammar-037','grammar-klaire-mixed-conditions','grammar-klaire-wish','grammar-klaire-modal-perfect']},
   {id:'verbs', title:'非谓语与动词搭配', priority:true,
-    summary:'对照 to do 和 doing，再复习分词作定语。',
-    ids:['grammar-klaire-verb-pairs','grammar-034','grammar-klaire-participle-modifiers','grammar-032','grammar-033','grammar-klaire-modal-perfect']},
+    summary:'对照 to do 和 doing，看句末的 -ing 是谁在做，再复习分词作定语。',
+    ids:['grammar-klaire-verb-pairs','grammar-034','grammar-klaire-participle-actions','grammar-klaire-participle-modifiers','grammar-032','grammar-033','grammar-klaire-modal-perfect']},
   {id:'sentences', title:'复杂句与主干', priority:false,
     summary:'先找主谓，再拆从句、比较和主谓一致。',
     ids:['grammar-klaire-sentence-core','grammar-039','grammar-040','grammar-038','grammar-014','grammar-025']},

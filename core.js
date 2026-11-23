@@ -1,6 +1,6 @@
 import { cloneStudyData } from './compat.js';
-import {LESSON_MODULES, lessonKey, validateLessons} from './curriculum.js?v=20261123-vocabulary';
-import { validateWordStudy } from './word-study.js';
+import {LESSON_MODULES, lessonKey, validateLessons} from './curriculum.js';
+import { validateWordStudy } from './word-study.js?v=20261124';
 
 export const SCHEMA_VERSION = 3;
 export const STORAGE_KEY = 'english-garden.v1';

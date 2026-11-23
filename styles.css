@@ -667,7 +667,6 @@ dialog{border:1px solid #e1e6d8;border-radius:18px;padding:33px;width:min(475px,
 .review-ratings .rating-title { margin: 0 0 10px; font-size: 14px; color: #395b48; scroll-margin-top: 18px; }
 .review-ratings .rating { align-items: center; min-width: 0; }
 .review-ratings .rating span { white-space: normal; }
-.rating-jump { min-height: 44px; margin-top: 6px; }
 .review-completion { padding: 22px; text-align: left; }
 .review-completion h1 { margin: 0 0 5px; font-size: 25px; }
 .review-completion .section-title { align-items: flex-start; gap: 10px; flex-wrap: wrap; }
@@ -762,6 +761,30 @@ dialog{border:1px solid #e1e6d8;border-radius:18px;padding:33px;width:min(475px,
 .word-study-box .sound-button { flex-shrink: 0; }
 .word-detail-notes summary { cursor: pointer; color: var(--green); font-size: 14px; font-weight: 650; }
 .word-detail-notes .detail-notes { margin-top: 16px; }
+.recall-card { min-height: 0; padding: clamp(18px, 4vw, 28px); }
+.recall-card .flash-sounds { margin-block: 10px; }
+.recall-card .flash-answer { margin-top: 12px; padding-top: 12px; }
+.recall-card .recall-hint { margin-top: 14px; }
+.recall-card .word-study-box { margin-bottom: 0; }
+.recall-card .grammar-example { padding-bottom: 0; border-bottom: 0; }
+.recall-card .grammar-example .audio-buttons { margin-top: 5px; }
+.practice-top, .direction-switch button, .recall-card .flash-ipa { color: var(--muted); }
+.practice-wrap .rating-title { color: var(--muted); margin-top: 14px; }
+.practice-wrap .rating { padding-block: 9px; }
+.review-more {
+  padding: 10px 14px;
+  margin-top: 12px;
+  text-align: left;
+}
+.review-more > summary {
+  min-height: 38px;
+  padding-block: 7px;
+  cursor: pointer;
+  color: var(--green);
+  font-weight: 650;
+}
+.related-more { padding: 0; margin-top: 0; border-top: 1px solid var(--line); }
+.backup-content.backup-single { grid-template-columns: minmax(0, 1fr); }
 .library-index-controls :is(.btn,.text-button) { min-height: 42px; padding: 5px 10px; white-space: nowrap; }
 .library-index-controls :is(.btn,.text-button) .icon { width: 16px; height: 16px; flex-shrink: 0; }
 .library-index-controls :is(.text-button,#library-filter-toggle) { color: var(--green); }

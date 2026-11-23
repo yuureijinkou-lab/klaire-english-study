@@ -103,6 +103,8 @@ const personal = {
     ['I wish','引出与实际不同的愿望'],['I had remembered','从句，假设过去记得'],['to bring my passport','remember to do，记得去做'],['yesterday.','想改变的时间在过去']]],
   'verb-pairs':['我们在去车站的路上停下来买咖啡。','stopped to buy 表示停下别的事，为了买咖啡。stopped buying coffee 表示不再买咖啡这个行为。',[
     ['We','主语'],['stopped','谓语，先暂停正在做的事'],['to buy coffee','不定式，说明停下来的目的'],['on the way to the station.','在哪段路上发生']]],
+  'participle-actions':['她把书放进盒子里，再用毛巾盖住书。','先找主句的主语 she。盖书的也是她。这里按实际动作顺序理解，可以说 She put the books in the box and covered them with a towel.',[
+    ['She','两个动作的执行者'],['put the books','先放书'],['in the box,','放到盒子里'],['covering them with a towel.','再用毛巾盖住书']]],
   'participle-modifiers':['昨天下的订单已经准备好取货了。','placed yesterday 修饰 orders，可还原为 that were placed yesterday。订单是被提交的，因此用过去分词 placed。',[
     ['The orders','主语中心词'],['placed yesterday','过去分词作定语，说明是哪些订单'],['are','主句谓语，跟复数 orders 搭配'],['ready for collection.','表语，说明订单可以取了']]],
   'modal-perfect':['我本来应该在出门前查看时间表。','should have checked 用来反思过去应该做却没做的事。could have checked 可表示过去本来有机会，would have checked 常用于假设结果。',[

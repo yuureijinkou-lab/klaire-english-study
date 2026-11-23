@@ -1,8 +1,10 @@
-import {activeEntries, makeQueue} from './core.js';
-import {KLAIRE_REVIEW_TOPICS} from './klaire-review.js';
+import {activeEntries, makeQueue} from './core.js?v=20261124';
+import {KLAIRE_REVIEW_TOPICS} from './klaire-review.js?v=20261124';
 
 const topicsById = new Map(KLAIRE_REVIEW_TOPICS.map(topic=>[topic.id,topic]));
 const focusIds = new Set(KLAIRE_REVIEW_TOPICS.flatMap(topic=>topic.ids));
+export const SHORT_REVIEW_LIMIT = 5;
+const openingGrammar = ['grammar-001','grammar-003','grammar-007','grammar-002'];
 
 export function focusTopicForCard(id, preferredId) {
   if (!focusIds.has(id)) return undefined;
@@ -28,15 +30,15 @@ export function makeHomeReviewPlan(state, now=Date.now()) {
   const focusDue = due.filter(id=>focusIds.has(id));
   const otherDue = due.filter(id=>!focusIds.has(id));
   const last = lastFocusTopic(state);
-  const preferredIds = [...(last?.ids||[]),...focusIds];
-  // Keep room for vocabulary and other modules within the existing daily allowance.
-  const maxNewFocus = Math.ceil(newCards.length / 2);
-  const newFocus = maxNewFocus
-    ? makeQueue(state,{module:'grammar',ids:preferredIds,onlyNew:true,now}).slice(0,maxNewFocus)
-    : [];
-  const fresh = [...new Set([...newFocus,...newCards])].slice(0,newCards.length);
   const dueIds = [...focusDue,...otherDue];
-  return {ids:[...dueIds,...fresh], dueIds, focusDueCount:focusDue.length, newCount:fresh.length};
+  const dueInRound = dueIds.slice(0,SHORT_REVIEW_LIMIT);
+  const newSlots = Math.min(SHORT_REVIEW_LIMIT-dueInRound.length,newCards.length);
+  // Start new material with one grammar card, then use the regular mixed queue.
+  const focus = newSlots
+    ? makeQueue(state,{module:'grammar',ids:[...(last?.ids||[]),...openingGrammar],onlyNew:true,now}).slice(0,1)
+    : [];
+  const fresh = [...new Set([...focus,...newCards])].slice(0,newSlots);
+  return {ids:[...dueInRound,...fresh], dueIds, focusDueCount:focusDue.length, newCount:fresh.length};
 }
 
 export function nextScheduledReview(state, now=Date.now()) {

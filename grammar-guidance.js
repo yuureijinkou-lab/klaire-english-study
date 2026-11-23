@@ -55,6 +55,7 @@ const personalGuides = {
   'mixed-conditions':'分别标清条件和结果的时间。If I had booked earlier 是过去条件；I would have a room now 是现在结果。',
   wish:'先判断想改变的是现在，还是已经发生的过去。wish I had time 是希望现在有时间；wish I had called 是后悔过去没打电话。',
   'verb-pairs':'看两个动作的先后和目的。remember locking 指记得做过，remember to lock 指记得去做。',
+  'participle-actions':'是 she 在盖。她先放好书，再用毛巾盖住，可以用 and covered 补出第二个动作。',
   'participle-modifiers':'把名词短语还原成从句。people waiting 是人主动等；items ordered 是商品被订购。',
   'modal-perfect':'三种形式都回看过去。should 多谈本该，could 多谈有机会或可能，would 多谈假设结果。',
   'sentence-core':'遇到长句，先找一个能独立成立的主干。找到 The train had left 后，再逐块对照哪段修饰火车，哪段说明时间。',
@@ -68,6 +69,16 @@ export function guidanceForCard(id) {
   if (Object.prototype.hasOwnProperty.call(EXPANDED_GUIDANCE,id)) return EXPANDED_GUIDANCE[id];
   const personal = /^grammar-klaire-(.+)$/.exec(id);
   return personal ? personalGuides[personal[1]] : undefined;
+}
+
+const missingContinuousSubjects = new Map([
+  ['grammar-002', /^否定：(?=am\/is\/are not \+ 动词-ing\r?$)/m],
+  ['grammar-004', /^否定：(?=was\/were not \+ 动词-ing\r?$)/m]
+]);
+
+export function grammarStructureText({id, structures}) {
+  const prefix = missingContinuousSubjects.get(id);
+  return prefix ? structures.replace(prefix, '否定：主语 + ') : structures;
 }
 
 export const ADVANCED_TIMELINE_CARD = {

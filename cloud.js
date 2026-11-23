@@ -1,6 +1,6 @@
-import { JournalRepository, SnapshotSync } from './cloud-core.js?v=20261123-vocabulary';
-import { createState, prepareState, validateState, exportObject } from './core.js?v=20261123-vocabulary';
-import { SEED_ENTRIES } from './data.js';
+import { JournalRepository, SnapshotSync } from './cloud-core.js?v=20261124';
+import { createState, prepareState, validateState, exportObject } from './core.js?v=20261124';
+import { SEED_ENTRIES } from './data.js?v=20261124';
 export const CLOUD_URL='https://xuzekwjaymklaeftcwnj.supabase.co';
 export const CLOUD_KEY='sb_publishable_b1Dl8JMQNDBhP5rgR5RhPg_5PakLs1Y';
 const ACTIVE_KEY='klaire.study.active-account';
@@ -29,7 +29,6 @@ export function createCloud(host) {
       el.textContent=feedback?.text||'';
       el.toggleAttribute('data-error',!!feedback?.error);
     });
-    const chip=document.querySelector('[data-cloud-chip]');if(chip)chip.textContent=account?(active()&&engine?.status==='saved'?'云端已保存':'账号本机副本'):'本机保存';
     if(pendingSession&&host.safeToLeave())schedule(0);
   };
   function transport(id,epoch) {

@@ -1,4 +1,4 @@
-import { STORAGE_KEY, PREVIOUS_KEY, UPGRADE_KEY } from './core.js';
+import { STORAGE_KEY, PREVIOUS_KEY, UPGRADE_KEY } from './core.js?v=20261124';
 const BEFORE_V3_KEY = 'english-garden.before-upgrade.v2';
 
 // Browser-only persistence boundary. The learning rules in core.js have no storage dependency.

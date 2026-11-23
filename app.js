@@ -1,20 +1,20 @@
 import { cloneStudyData, studyUuid, prepareStudyDialog } from './compat.js';
-import { SEED_ENTRIES } from './data.js';
-import { SCHEMA_VERSION, STORAGE_KEY, DAY, NEW_PER_DAY_OPTIONS, kindFor, createState, prepareState, validateState, exportObject, activeEntries, isDue, schedule, recordReview, recordSpelling, checkSpelling, makeQueue, stats } from './core.js?v=20261123-vocabulary';
-import { BOOKS, LESSON_MODULES, lessonKey, lessonFields, parseEntryLines, parseLessonText, planLessonImport, planWordImport } from './curriculum.js?v=20261123-vocabulary';
+import { SEED_ENTRIES } from './data.js?v=20261124';
+import { SCHEMA_VERSION, STORAGE_KEY, DAY, NEW_PER_DAY_OPTIONS, kindFor, createState, prepareState, validateState, exportObject, activeEntries, isDue, schedule, recordReview, recordSpelling, checkSpelling, makeQueue, stats } from './core.js?v=20261124';
+import { BOOKS, LESSON_MODULES, lessonKey, lessonFields, parseEntryLines, parseLessonText, planLessonImport, planWordImport } from './curriculum.js';
 import { COURSE_PAGES, courseSourcePage, courseHeading, courseLessonText } from './curriculum-ui.js';
-import { KLAIRE_REVIEW_TOPICS } from './klaire-review.js';
-import { REVIEW_SCENES, focusTopicForCard, lastFocusTopic, makeHomeReviewPlan, nextScheduledReview, recentlyStuck } from './review-dashboard.js';
-import { GRAMMAR_BRANCHES, TENSE_TIMELINES, renderGrammarMap } from './grammar-map.js';
+import { KLAIRE_REVIEW_TOPICS } from './klaire-review.js?v=20261124';
+import { REVIEW_SCENES, SHORT_REVIEW_LIMIT, focusTopicForCard, lastFocusTopic, makeHomeReviewPlan, nextScheduledReview, recentlyStuck } from './review-dashboard.js?v=20261124';
+import { GRAMMAR_BRANCHES, TENSE_TIMELINES, renderGrammarMap } from './grammar-map.js?v=20261124';
 import { GUIDE_VIEWS, PEOPLE, guideAudio, phonemeAudioUrl, renderPhoneticGuide } from './grammar-reference.js';
 import { CLAUSE_GROUPS } from './grammar-clauses.js';
-import { guidanceForCard } from './grammar-guidance.js';
-import { GRAMMAR_BREAKDOWNS } from './grammar-breakdowns.js';
+import { guidanceForCard, grammarStructureText } from './grammar-guidance.js?v=20261124';
+import { GRAMMAR_BREAKDOWNS } from './grammar-breakdowns.js?v=20261124';
 import { BASIC_WORD_GROUPS } from './basic-words.js';
-import { STUDY_WORD_GROUPS } from './study-groups.js?v=20261123-vocabulary';
-import { partOfSpeechLabel, planWordStudyImport, studyExamples, relatedReviewIds } from './word-study.js';
-import { BrowserRepository } from './repository.js';
-import { createCloud } from './cloud.js?v=20261123-vocabulary';
+import { STUDY_WORD_GROUPS } from './study-groups.js';
+import { partOfSpeechLabel, planWordStudyImport, studyExamples, relatedReviewIds } from './word-study.js?v=20261124';
+import { BrowserRepository } from './repository.js?v=20261124';
+import { createCloud } from './cloud.js?v=20261124';
 
 const $ = s => document.querySelector(s);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -114,6 +114,7 @@ let confirmAction = null;
 let toastTimer;
 let undoAction = null;
 let voices = [];
+let explainedVoiceFallback = '';
 let phonemePlayer;
 const entryTitle=e=>e?.kind==='grammar'?e.title:e?.en||'';
 const entryMeaning=e=>e?.kind==='grammar'?e.explanation:e?.zh||'';
@@ -128,8 +129,7 @@ function renderWordCollocations(entry) {
 }
 const wordPos = entry => partOfSpeechLabel(entry.pos) || partOfSpeechLabel(entry.wordStudy?.pos);
 
-function renderWordExamples(entry) {
-  const examples = studyExamples(entry);
+function renderWordExamples(examples) {
   if (!examples.length) return '';
   return `<section class="word-study-box"><h3>例句</h3><ul>${examples.map(({ en, zh }) =>
     `<li><div>${en ? `<p lang="en">${esc(en)}</p>` : ''}${zh ? `<p class="word-study-meaning">${esc(zh)}</p>` : ''}</div>${en ? guideAudio(en,{escape:esc,icon}) : ''}</li>`
@@ -139,21 +139,31 @@ function renderWordExamples(entry) {
 function renderRelatedWords(entry, session) {
   const links = entry.wordStudy?.related || [];
   if (!links.length) return '';
-  const canAdd = session && relatedReviewIds(entry, state.entries, session.ids).length;
+  const matchCount = session ? relatedReviewIds(entry, state.entries, session.ids).length : 0;
+  const list = rows => `<ul>${rows.map(({ en, zh }) => `<li><div><strong lang="en">${esc(en)}</strong><p class="word-study-meaning">${esc(zh)}</p></div>${guideAudio(en,{escape:esc,icon})}</li>`).join('')}</ul>`;
+  const more = session && links.length > 1;
   return `<section class="word-study-box"><div class="word-study-heading"><h3>相关词</h3>
-    ${canAdd ? '<button type="button" class="btn small" data-action="review-related">把已收录的相关词加入本轮</button>' : ''}</div>
-    <ul>${links.map(({ en, zh }) => `<li><div><strong lang="en">${esc(en)}</strong><p class="word-study-meaning">${esc(zh)}</p></div>${guideAudio(en,{escape:esc,icon})}</li>`).join('')}</ul></section>`;
+    ${matchCount ? `<button type="button" class="btn small" data-action="review-related" aria-label="把 ${matchCount} 张同义项的词卡加入本轮">加入本轮 · ${matchCount} 张</button>` : ''}</div>
+    ${list(more ? links.slice(0,1) : links)}
+    ${more ? `<details class="review-more related-more"><summary>其余 ${links.length-1} 条</summary>${list(links.slice(1))}</details>` : ''}</section>`;
 }
 
-function renderRecallAnswer(entry, session, reverse) {
+function renderRecallAnswer(entry, reverse) {
   const pos = entry.kind === 'word' ? wordPos(entry) : '';
   const meta = [reverse && entry.ipa ? `<span class="ipa">/${esc(entry.ipa)}/</span>` : '',
     pos ? `<span lang="en">${esc(pos)}</span>` : ''].join('');
   return `<div class="flash-answer"><h2>${esc(reverse ? entry.en : entry.zh)}</h2>
     ${meta ? `<div class="word-meta">${meta}</div>` : ''}
-    ${entry.kind === 'word' ? renderWordExamples(entry) : `<p class="example-en" lang="en">${esc(entry.example)}</p><p class="example-zh">${esc(entry.exampleZh)}</p>`}
-    ${phraseUsage(entry)}${renderWordCollocations(entry)}${renderRelatedWords(entry, session)}
-    ${entry.notes ? `<div class="flash-note">${icon('edit')} ${esc(entry.notes)}</div>` : ''}</div>`;
+    ${entry.kind === 'word' ? renderWordExamples(studyExamples(entry).slice(0,1)) : `<p class="example-en" lang="en">${esc(entry.example)}</p><p class="example-zh">${esc(entry.exampleZh)}</p>`}
+    </div>`;
+}
+
+function renderRecallExtras(entry, session) {
+  const otherExamples = entry.kind==='word' ? renderWordExamples(studyExamples(entry).slice(1)) : '';
+  const reference = renderWordCollocations(entry) + phraseUsage(entry) +
+    (entry.notes ? `<div class="flash-note">${icon('edit')} ${esc(entry.notes)}</div>` : '');
+  return `${renderRelatedWords(entry,session)}
+    ${otherExamples||reference ? `<details class="panel review-more"><summary>${otherExamples?'更多例句与用法':'用法与备注'}</summary>${otherExamples}${reference}</details>` : ''}`;
 }
 const recallOptions=[
   {id:'forgot', label:'忘了', interval:'10 分钟后', shortcut:'1'},
@@ -214,8 +224,10 @@ function libraryStatusFilters(module,pending) {
 function wordGroupIntro(category) {
   const selected=wordTopics.find(group=>group.name===category);
   if(!selected)return '';
-  return `<div class="word-group-intro"><p>${esc(selected.note)}</p>
-    ${selected?.id?`<button type="button" class="text-button" data-action="open-study-scene" data-scene="${selected.id}">看「${esc(selected.title)}」用法对照 ${icon('chevron')}</button>`:''}
+  if(!selected.id)return `<div class="word-group-intro"><p>${esc(selected.note)}</p></div>`;
+  return `<div class="word-group-intro button-row">
+    <button type="button" class="btn small" data-action="study-words-review" data-scene="${esc(selected.id)}">复习这组</button>
+    <button type="button" class="text-button" data-action="open-study-scene" data-scene="${esc(selected.id)}">场景对话 ${icon('chevron')}</button>
   </div>`;
 }
 const wordTopics=[...BASIC_WORD_GROUPS,...STUDY_WORD_GROUPS];
@@ -314,23 +326,24 @@ function renderLibraryIndex(module,entries,limit) {
     if(!groups.has(category))groups.set(category,[]);
     groups.get(category).push(card);
   }
-  const groupMinimum=module==='words'?Math.min(24,Math.floor(limit/groups.size)):0;
-  let remaining=limit-[...groups.values()].reduce((total,cards)=>total+Math.min(groupMinimum,cards.length),0);
+  const allWords=module==='words';
+  let remaining=limit;
   const expandMatches=isLibraryFiltered();
   const groupViews=[];
   for(const [category,cards] of groups){
-    const reserved=Math.min(groupMinimum,cards.length);
-    const visible=cards.slice(0,reserved+remaining);
-    remaining-=visible.length-reserved;
+    const visible=allWords?cards:cards.slice(0,remaining);
+    remaining-=visible.length;
     if(visible.length)groupViews.push({category,visible,count:cards.length});
   }
-  if(module==='words')groupViews.sort((a,b)=>compareWordCategories(a.category,b.category));
-  return `<div class="library-index">${groupViews.map(({category,visible,count})=>
-    `<details class="panel library-index-group" data-index-group="${esc(category)}" ${expandMatches||openLibraryGroups[module].has(category)?'open':''}>
+  if(allWords)groupViews.sort((a,b)=>compareWordCategories(a.category,b.category));
+  return `<div class="library-index">${groupViews.map(({category,visible,count})=>{
+    const open=expandMatches||openLibraryGroups[module].has(category);
+    return `<details class="panel library-index-group" data-index-group="${esc(category)}" ${open?'open':''}>
       <summary><strong>${esc(categoryLabel(module,category))}</strong><span>${visible.length<count?`${visible.length} / `:''}${count} 条</span></summary>
-      ${module==='words'?wordGroupIntro(category):''}
-      <ul>${visible.map(libraryIndexRow).join('')}</ul>
-    </details>`).join('')}</div>`;
+      ${allWords?wordGroupIntro(category):''}
+      <ul>${open||!allWords?visible.map(libraryIndexRow).join(''):''}</ul>
+    </details>`;
+  }).join('')}</div>`;
 }
 
 function renderGrammarBreakdown(example) {
@@ -342,15 +355,22 @@ function renderGrammarBreakdown(example) {
     <p class="breakdown-reason"><strong>为什么这样说</strong> ${esc(example.reason)}</p>
   </section>`;
 }
-function grammarExplanation(e) {
+function renderGrammarExample(e, i) {
+  const {en,zh}=e.examples[i];
+  return `<div class="grammar-example"><div><p lang="en">${esc(en)}</p><p>${esc(zh)}</p></div><div class="audio-buttons"><button type="button" class="sound-button" data-action="speak" data-id="${esc(e.id)}" data-example="${i}" aria-label="朗读例句 ${i+1}">${icon('speaker')}</button><button type="button" class="slow-button" data-action="speak-slow" data-id="${esc(e.id)}" data-example="${i}" aria-label="慢速朗读例句 ${i+1}">慢速</button></div></div>`;
+}
+function grammarExplanation(e, summary='') {
   const guide=guidanceForCard(e.id);
   const example=Object.prototype.hasOwnProperty.call(GRAMMAR_BREAKDOWNS,e.id)?GRAMMAR_BREAKDOWNS[e.id]:null;
+  const explanation = summary && e.explanation.startsWith(summary) ? e.explanation.slice(summary.length).trim() : e.explanation;
+  const offset=summary?1:0;
+  const otherExamples=e.examples.slice(offset);
   return `<div class="grammar-explanation">
     ${guide?`<section class="grammar-start"><h3>先怎么看</h3><p>${esc(guide)}</p></section>`:''}
-    <section><h3>用法</h3><p>${lines(e.explanation)}</p></section>
-    <section><h3>句型结构</h3><p class="structure-box">${lines(e.structures)||'未填写'}</p></section>
+    ${explanation?`<section><h3>用法</h3><p>${lines(explanation)}</p></section>`:''}
+    <section><h3>句型结构</h3><p class="structure-box">${lines(grammarStructureText(e))||'未填写'}</p></section>
     ${example?renderGrammarBreakdown(example):''}
-    <details class="grammar-more-examples" ${example?'':'open'}><summary>双语例句 · ${e.examples.length} 句</summary>${e.examples.map((x,i)=>`<div class="grammar-example"><div><p lang="en">${esc(x.en)}</p><p>${esc(x.zh)}</p></div><div class="audio-buttons"><button type="button" class="sound-button" data-action="speak" data-id="${esc(e.id)}" data-example="${i}" aria-label="朗读例句 ${i+1}">${icon('speaker')}</button><button type="button" class="slow-button" data-action="speak-slow" data-id="${esc(e.id)}" data-example="${i}" aria-label="慢速朗读例句 ${i+1}">慢速</button></div></div>`).join('')}</details>
+    ${otherExamples.length?`<details class="grammar-more-examples" ${example?'':'open'}><summary>双语例句 · ${otherExamples.length} 句</summary>${otherExamples.map((_,i)=>renderGrammarExample(e,i+offset)).join('')}</details>`:''}
     ${e.mistakes?`<section class="mistake-box"><h3>易错点</h3><p>${lines(e.mistakes)}</p></section>`:''}
     ${e.comparison?`<section><h3>对比记忆</h3><p>${lines(e.comparison)}</p></section>`:''}
     ${e.notes?`<section class="flash-note"><h3>我的备注</h3><p>${lines(e.notes)}</p></section>`:''}</div>`;
@@ -370,13 +390,13 @@ function reviewRatings(entry) {
 }
 
 function renderGrammarPractice(e,s) {
+  const summary=e.explanation.match(/^[^。！？\n]+[。！？]?/)?.[0] || e.explanation;
   return `${practiceHeader(s,'语法翻卡')}
     <div class="practice-wrap grammar-practice">
-      <div class="practice-label">${esc(e.book)} · ${esc(e.category)} · ${state.progress[e.id]?'复习内容':'新内容'}</div>
-      <article class="flashcard grammar-flashcard ${s.flipped?'revealed':''}"><span class="eyebrow">${s.flipped?'讲解':'回忆知识点'}</span>
-        <h1 id="review-card-heading" tabindex="-1">${esc(e.title)}</h1><p class="grammar-recall">${esc(e.prompt)}</p>
-        ${s.flipped?`<button type="button" class="text-button rating-jump" data-action="jump-rating">跳到记忆评价 ${icon('arrow')}</button>${grammarExplanation(e)}`:'<button type="button" class="btn primary reveal-button" data-action="flip">查看讲解 <kbd>空格</kbd></button>'}
-      </article>${s.flipped?reviewRatings(e):''}
+      <article class="flashcard grammar-flashcard recall-card ${s.flipped?'revealed':''}">
+        <h1 id="review-card-heading" tabindex="-1">${esc(e.title)}</h1>
+        ${s.flipped?`<p class="grammar-recall">${esc(summary)}</p>${e.examples.length?renderGrammarExample(e,0):''}`:`<p class="grammar-recall">${lines(e.prompt)}</p><button type="button" class="btn primary reveal-button" data-action="flip">查看讲解 <kbd>空格</kbd></button>`}
+      </article>${s.flipped?`${reviewRatings(e)}<details class="panel review-more"><summary>详细讲解</summary>${grammarExplanation(e,summary)}</details>`:''}
     </div>`;
 }
 
@@ -502,8 +522,7 @@ function render() {
     <aside class="sidebar"><button class="brand" data-nav="home"><span class="brand-mark">${icon('book')}</span><span>Klaire’s Notes</span></button>
       <nav aria-label="主导航">${nav(false)}</nav>
     </aside>
-    <div class="workspace"><header class="topbar"><span class="mobile-brand">${icon('book')} Klaire’s Notes</span><span class="breadcrumb">${pageName(current)}</span>
-      <div class="topbar-right"><span class="local-chip">${icon('shield')} 本地版</span></div></header>
+    <div class="workspace"><header class="topbar"><span class="mobile-brand">${icon('book')} Klaire’s Notes</span><span class="breadcrumb">${pageName(current)}</span></header>
     <main id="main" tabindex="-1">
       ${!storageOK ? `<div class="storage-warning" role="alert">${icon('info')}<div><strong>${corruptRaw!==null?'检测到原来的记录格式异常，已保留原文。':'当前修改尚未可靠保存。'}</strong><p>${corruptRaw!==null?'当前展示初始词表；请先下载原始记录和当前备份，再恢复有效备份。':'请不要关闭页面，先下载备份。可能是浏览器禁止保存或存储空间不足。'}</p></div><button class="btn small" data-action="export">下载当前备份</button>${corruptRaw!==null?'<button class="btn small" data-action="export-raw">下载原始记录</button>':''}</div>`:''}
       ${parent?`<div class="page-back"><button type="button" class="text-button" data-action="back-to-parent">${icon('back')} 返回${pageName(parent)}</button></div>`:''}
@@ -522,11 +541,11 @@ function renderHome(s) {
   const recent = [...state.activities].reverse().find(a=>state.entries.some(e=>e.id===a.itemId&&!e.deletedAt));
   const recentEntry = recent && state.entries.find(e=>e.id===recent.itemId);
   return `<section class="hero task-panel"><div class="hero-copy"><h1>今日复习</h1>
-      <p><strong>${plan.dueIds.length}</strong> 张已到期${plan.focusDueCount?`，其中 ${plan.focusDueCount} 张是个人重点`:''} · <strong>${plan.newCount}</strong> 张可学新卡</p>
+      <p>${plan.ids.length?`本轮 ${plan.ids.length-plan.newCount} 张复习 · ${plan.newCount} 张新卡`:'今天暂无可复习的卡片。'}</p>
       ${next===undefined?'':`<p class="next-review">下一张卡到期于 ${reviewTime(next)}</p>`}</div>
       <div class="home-review-actions">
-        ${plan.ids.length?`<button type="button" class="btn primary large" data-action="start-review">开始复习 ${icon('arrow')}</button>`:'<a class="btn" href="#home-modules-title">浏览学习模块</a>'}
-        ${plan.dueIds.length&&plan.newCount?'<button type="button" class="btn" data-action="start-review" data-only-due="true">只复习到期卡</button>':''}
+        ${plan.ids.length?`<button type="button" class="btn primary large" data-action="start-review">练 ${plan.ids.length} 张 ${icon('arrow')}</button>`:'<a class="btn" href="#home-modules-title">浏览学习模块</a>'}
+        ${plan.dueIds.length&&(plan.newCount||plan.dueIds.length>plan.ids.length)?`<button type="button" class="btn" data-action="start-review" data-only-due="true">只复习到期卡 · ${plan.dueIds.length} 张</button>`:''}
       </div></section>
     <section class="stats-grid" aria-label="学习概况">
       ${[[s.studied,'已学习','book',`共 ${s.total} 条`],[s.reviewedToday,'今日已复习','check',''],[s.spellingToday,'今日拼写','keyboard','']].map(([n,label,ic,small])=>`<div class="stat"><div class="stat-icon ${ic}">${icon(ic)}</div><div><div class="stat-label">${label}</div><strong>${n}</strong>${small?`<small>${small}</small>`:''}</div></div>`).join('')}
@@ -534,10 +553,10 @@ function renderHome(s) {
     <div class="home-content">
       <div class="home-review-hub">
         ${moduleLinks([['focus','我的复习重点',last?`继续上次主题 · ${last.title}`:'从时间与地点介词开始','flag']])}
-        <section class="panel review-focus-panel home-stuck" aria-labelledby="home-stuck-title">
-          <div class="section-title"><h2 id="home-stuck-title">最近卡住的</h2>${stuck.length?`<button class="text-button" data-nav="stuck">查看全部 ${stuck.length} 张 ${icon('arrow')}</button>`:''}</div>
+        ${stuck.length?`<section class="panel review-focus-panel home-stuck" aria-labelledby="home-stuck-title">
+          <div class="section-title"><h2 id="home-stuck-title">最近卡住的</h2><button class="text-button" data-nav="stuck">查看全部 ${stuck.length} 张 ${icon('arrow')}</button></div>
           ${renderStuckList(stuck.slice(0,3))}
-        </section>
+        </section>`:''}
       </div>
       <section class="home-modules" aria-labelledby="home-modules-title"><div class="section-title"><h2 id="home-modules-title">学习模块</h2></div><div class="collection-grid">
         ${librarySections.map(([key,title,description,unit,group])=>{
@@ -623,14 +642,14 @@ function renderLibrary(module) {
 }
 function resultSummary() {
   const n=filteredEntries().length;
-  if(usesLibraryIndex(ui.page)&&n<=ui.limit)return `${n} 条`;
+  if(ui.page==='words'||(usesLibraryIndex(ui.page)&&n<=ui.limit))return `${n} 条`;
   return `${ui.search?'搜索结果':'当前显示'} ${Math.min(ui.limit,n)} / ${n} 条`;
 }
 function libraryResults() {
   const entries=filteredEntries();
   if(!entries.length) return `<div class="empty-state">${icon(ui.filter==='due'?'check':'search')}<h2>${ui.filter==='due'?'暂时没有到期的内容':'这里还没有匹配的内容'}</h2><p>${ui.filter==='due'?'可以切换“未学”开始积累，或者稍后再来。':'试试其他关键词或筛选，也可以新增自己的内容。'}</p><button class="btn" data-action="clear-filter">查看全部</button></div>`;
   const list=usesLibraryIndex(ui.page)?renderLibraryIndex(ui.page,entries,ui.limit):`<div class="entry-grid phrases">${entries.slice(0,ui.limit).map(entryCard).join('')}</div>`;
-  return list+(entries.length>ui.limit?`<div class="load-more"><button class="btn" data-action="load-more">再看 ${Math.min(24,entries.length-ui.limit)} 条 ${icon('chevron')}</button></div>`:'');
+  return list+(ui.page!=='words'&&entries.length>ui.limit?`<div class="load-more"><button class="btn" data-action="load-more">再看 ${Math.min(24,entries.length-ui.limit)} 条 ${icon('chevron')}</button></div>`:'');
 }
 function renderLibraryResults() {if($('#library-results')){$('#library-results').innerHTML=libraryResults();$('#result-summary').textContent=resultSummary();}}
 function entryCard(e) {
@@ -640,7 +659,7 @@ function entryCard(e) {
     <div class="entry-footer"><div class="audio-buttons"><button class="sound-button" data-action="speak" data-id="${e.id}" aria-label="朗读 ${esc(e.en)}">${icon('speaker')}</button><button class="slow-button" data-action="speak-slow" data-id="${e.id}" aria-label="慢速朗读 ${esc(e.en)}">慢速</button></div><button class="text-button muted" data-action="edit" data-id="${e.id}">${icon('edit')} 备注 / 编辑</button></div></article>`;
 }
 
-function startReview(module, scopedIds, onlyDue=false) {
+function startReview(module, scopedIds, onlyDue=false, sceneId='') {
   const homePlan=ui.page==='home'&&!module&&!scopedIds?makeHomeReviewPlan(state):null;
   const ids=homePlan?(onlyDue?homePlan.dueIds:homePlan.ids)
     : makeQueue(state,{module,onlyDue,ids:scopedIds??(module&&ui.page===module?filteredEntries().map(e=>e.id):undefined)});
@@ -655,7 +674,7 @@ function startReview(module, scopedIds, onlyDue=false) {
   }
   if(!ids.length) {openModal(`<div class="modal-icon">${icon('check')}</div><h2 id="dialog-title">当前没有可学习的内容</h2><p>当前没有到期内容，或今天的新内容额度已用完。你可以在设置中调整每日新内容数量，也可以做单词拼写练习。</p><p class="subtle">“待核对”的词条需要先确认，才会加入学习。</p><button class="btn primary" data-action="close-dialog">知道了</button>`);return;}
   const focusTopic=ui.page==='focus'?currentFocusTopic().id:'';
-  ui.session={mode:'review',ids,index:0,flipped:false,done:false,results:[],direction:state.settings.direction,backPage:ui.page,backScroll:window.scrollY,focusTopic};ui.page='practice';showPage();
+  ui.session={mode:'review',ids:sceneId?ids.slice(0,SHORT_REVIEW_LIMIT):ids,index:0,flipped:false,done:false,results:[],direction:state.settings.direction,backPage:ui.page,backScroll:window.scrollY,focusTopic,sceneId};ui.page='practice';showPage();
 }
 function startSpelling() {
   const entries=filteredEntries().filter(e=>!e.needsCheck);
@@ -665,6 +684,7 @@ function startSpelling() {
 }
 function renderCompletion(session) {
   const isReview=session.mode==='review';
+  const sceneLine=REVIEW_SCENES.find(scene=>scene.id===session.sceneId)?.lines[0];
   const groupOptions=isReview?recallOptions:[
     {id:'wrong',label:'拼写有误'},
     {id:'correct',label:'拼写正确'}
@@ -676,6 +696,7 @@ function renderCompletion(session) {
     <div class="section-title"><div><h1 id="completion-heading" tabindex="-1">${isReview?'本次复习结果':'本次拼写结果'}</h1><p>完成 ${session.results.length} ${isReview?'张卡':'次拼写'}</p></div>
       <button type="button" class="btn primary" data-action="end-session">返回${pageName(session.backPage)}</button></div>
     <dl class="result-counts ${isReview?'':'spelling-counts'}">${groups.map(group=>`<div class="${group.id}"><dt>${group.label}</dt><dd>${group.results.length}</dd></div>`).join('')}</dl>
+    ${sceneLine?`<details class="review-more"><summary>场景例句</summary>${renderWordExamples([sceneLine])}</details>`:''}
     ${groups.filter(group=>group.results.length).map(group=>`<details class="review-result-group" ${['remembered','correct'].includes(group.id)?'':'open'}>
       <summary>${group.label} · ${group.results.length} ${isReview?'张':'条'}</summary>
       <ul class="review-focus-list">${group.results.map(result=>{
@@ -696,12 +717,12 @@ function renderPractice() {
   return `${practiceHeader(s,s.mode==='review'?'翻卡复习':'单词拼写')}
     <div class="practice-wrap">${s.mode==='spelling'?'<div class="practice-label">看中文，写英文</div>':''}
       ${s.mode==='review'?`<div class="direction-switch" role="group" aria-label="回忆方向"><button data-action="direction" data-value="en-zh" class="${!reverse?'active':''}" aria-pressed="${!reverse}">看英文想中文</button><button data-action="direction" data-value="zh-en" class="${reverse?'active':''}" aria-pressed="${reverse}">看中文想英文</button></div>`:''}
-      <article class="flashcard ${s.flipped||s.answered?'revealed':''}"><span class="eyebrow">${s.mode==='spelling'?'单词拼写':s.flipped?'答案':'回忆'}</span><h1 id="review-card-heading" tabindex="-1" class="flash-term ${reverse||s.mode==='spelling'?'chinese':''}" lang="${reverse||s.mode==='spelling'?'zh-CN':'en'}">${esc(s.mode==='spelling'||reverse?e.zh:e.en)}</h1>
-      ${s.mode==='review'&&!reverse?`<p class="flash-ipa">/${esc(e.ipa)||'待补充'}/</p>`:''}
-      ${s.mode==='review'?`<div class="flash-sounds"><button class="btn round" data-action="speak" data-id="${e.id}" aria-label="听当前内容的发音">${icon('speaker')}</button><button class="text-button muted" data-action="speak-slow" data-id="${e.id}">慢速${reverse&&!s.flipped?'提示':''}</button></div>${s.flipped?renderRecallAnswer(e,s,reverse):`<p class="recall-hint">回忆后点击“查看答案”。</p><button class="btn primary reveal-button" data-action="flip">${icon('eye')} 查看答案 <kbd>空格</kbd></button>`}`:
+      <article class="flashcard ${s.mode==='review'?'recall-card':''} ${s.flipped||s.answered?'revealed':''}"><h1 id="review-card-heading" tabindex="-1" class="flash-term ${reverse||s.mode==='spelling'?'chinese':''}" lang="${reverse||s.mode==='spelling'?'zh-CN':'en'}">${esc(s.mode==='spelling'||reverse?e.zh:e.en)}</h1>
+      ${s.mode==='review'&&!reverse&&e.ipa?`<p class="flash-ipa">/${esc(e.ipa)}/</p>`:''}
+      ${s.mode==='review'?`<div class="flash-sounds"><button class="btn round" data-action="speak" data-id="${e.id}" aria-label="听当前内容的发音">${icon('speaker')}</button><button class="text-button muted" data-action="speak-slow" data-id="${e.id}">慢速${reverse&&!s.flipped?'提示':''}</button></div>${s.flipped?renderRecallAnswer(e,reverse):`<p class="recall-hint">回忆后点击“查看答案”。</p><button class="btn primary reveal-button" data-action="flip">${icon('eye')} 查看答案 <kbd>空格</kbd></button>`}`:
       `<form id="spelling-form" class="spelling-form"><label class="sr-only" for="spelling-input">输入英文拼写</label><input id="spelling-input" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="在这里写下英文…" maxlength="500" value="${esc(s.input)}" ${s.answered?'disabled':''} required>${s.answered?`<div class="spelling-result ${s.correct?'correct':'incorrect'}" role="status">${icon(s.correct?'check':'refresh')} ${s.correct?'拼写正确。':'拼写错误，正确答案如下。'}</div><h2 class="spelling-answer" lang="en">${esc(e.en)}</h2><p class="ipa">/${esc(e.ipa)||'待补充'}/</p><div class="flash-sounds"><button type="button" class="btn round" data-action="speak" data-id="${e.id}" aria-label="朗读正确拼写">${icon('speaker')}</button><button type="button" class="text-button muted" data-action="speak-slow" data-id="${e.id}">慢速</button></div><p class="example-en" lang="en">${esc(e.example)}</p><p class="example-zh">${esc(e.exampleZh)}</p><button type="button" class="btn primary" data-action="next-spelling">${s.index+1===s.ids.length?'查看本次结果':'下一个'} ${icon('arrow')}</button>`:`<button type="submit" class="btn primary">检查拼写 ${icon('check')}</button><button type="button" class="text-button muted" data-action="skip-spelling">不知道，看看答案</button>`}</form>`}
       </article>
-      ${s.mode==='review'&&s.flipped?reviewRatings(e):''}
+      ${s.mode==='review'&&s.flipped?`${reviewRatings(e)}${renderRecallExtras(e,s)}`:''}
       ${s.mode==='spelling'?'<p class="practice-footnote">从当前筛选范围随机抽取最多 10 个单词，拼写成绩单独统计。</p>':''}
     </div>`;
 }
@@ -752,28 +773,28 @@ function answerSpelling(skip=false) {
 }
 
 function renderSettings(s) {
-  const matching=voices.filter(v=>v.lang.toLowerCase()===state.settings.accent.toLowerCase());
+  const matching=voices.filter(v=>voiceLanguage(v)===state.settings.accent.toLowerCase());
   const trash=state.entries.filter(e=>e.deletedAt);
   let previous=false,upgrade=false;try{previous=!!repository.previousRaw();upgrade=!!repository.beforeUpgradeRaw();}catch{}
   return `<section class="page-heading library-heading"><div><h1>备份与设置</h1></div></section>
     ${cloud?.panel() || ''}
     <section class="panel backup-panel"><div class="panel-heading">${icon('download')}<div><h2>学习记录备份</h2><p>换设备或清理浏览器前，请先下载一份。</p></div></div>
-      <div class="backup-content"><div><div class="backup-summary"><span><strong>${s.total}</strong> 条学习内容</span><span><strong>${state.activities.length}</strong> 次练习记录</span></div>
+      <div class="backup-content backup-single"><div><div class="backup-summary"><span><strong>${s.total}</strong> 条学习内容</span><span><strong>${state.activities.length}</strong> 次练习记录</span></div>
       <p>备份包含课文、词条、笔记、收藏、进度和设置。恢复会先显示备份内容供你确认。</p>
       <div class="button-row"><button type="button" class="btn primary" data-action="export">${icon('download')} 下载完整备份</button><button type="button" class="btn" data-action="import">${icon('upload')} 从备份恢复</button></div>
       ${upgrade||previous?`<div class="button-row backup-history">${upgrade?'<button type="button" class="text-button" data-action="export-upgrade">下载升级前的副本</button>':''}${previous?'<button type="button" class="text-button" data-action="export-previous">下载上次恢复前的副本</button>':''}</div>`:''}</div>
-      <div class="backup-aside">${icon('shield')}<strong>存在当前浏览器</strong><p>更换设备时，可以把备份导入新设备。</p></div></div>
+      </div>
     </section>
     <div class="settings-grid"><section class="panel settings-panel"><div class="panel-heading">${icon('sprout')}<div><h2>学习偏好</h2><p>设置每日新内容数量和回忆方向。</p></div></div>
       <label class="setting-row"><span><strong>每天学习的新内容</strong><small>各学习模块共用每日额度。到期复习不受此限制。</small></span><select data-setting="newPerDay">${NEW_PER_DAY_OPTIONS.map(option=>`<option value="${option}" ${state.settings.newPerDay===option?'selected':''}>${option==='unlimited'?'无限制':`${option} 条 / 天`}</option>`).join('')}</select></label>
       <label class="setting-row"><span><strong>默认回忆方向</strong><small>单词、短语可切换；语法采用知识点回忆。</small></span><select data-setting="direction"><option value="en-zh" ${state.settings.direction==='en-zh'?'selected':''}>看英文想中文</option><option value="zh-en" ${state.settings.direction==='zh-en'?'selected':''}>看中文想英文</option></select></label>
       <div class="setting-note">${icon('info')}“记住了”按1、3、7、14、30天递进；“模糊”次日复习，“忘了”10分钟后复习并重置间隔。</div>
     </section><section class="panel settings-panel"><div class="panel-heading">${icon('speaker')}<div><h2>发音与口音</h2><p>音标统一显示英式；朗读可以切换。</p></div></div>
-      <label class="setting-row"><span><strong>朗读口音</strong><small>只使用设备提供的本机英语声音。</small></span><select data-setting="accent"><option value="en-GB" ${state.settings.accent==='en-GB'?'selected':''}>英式英语</option><option value="en-US" ${state.settings.accent==='en-US'?'selected':''}>美式英语</option></select></label>
+      <label class="setting-row"><span><strong>朗读口音</strong><small>优先使用所选口音，也可用设备上已有的其他英语声音。</small></span><select data-setting="accent"><option value="en-GB" ${state.settings.accent==='en-GB'?'selected':''}>英式英语</option><option value="en-US" ${state.settings.accent==='en-US'?'selected':''}>美式英语</option></select></label>
       <label class="voice-label" for="voice-select">本机声音</label><select id="voice-select" data-setting="voiceURI" ${!matching.length?'disabled':''}>${matching.length?`<option value="">自动选择本机声音</option>${matching.map(v=>`<option value="${esc(v.voiceURI)}" ${v.voiceURI===state.settings.voiceURI?'selected':''}>${esc(v.name)}</option>`).join('')}`:'<option>未找到对应口音的本机声音</option>'}</select>
-      <div class="voice-test"><button class="btn small" data-action="test-voice">${icon('speaker')} 试听一句</button><span class="subtle">This is an English pronunciation test.</span></div><p class="fine-print">若没有声音，请先在系统设置中安装对应英语语音包，再重开浏览器。此版本不使用网络声音，不自动换成其他口音，也不调用付费朗读服务。</p>
+      <div class="voice-test"><button class="btn small" data-action="test-voice">${icon('speaker')} 试听一句</button><span class="subtle">This is an English pronunciation test.</span></div>
     </section></div>
-    <div class="settings-grid"><section class="panel info-panel"><h2>${icon('trash')} 回收站 <span class="count-badge">${trash.length}</span></h2><p>删除的内容先保留在这里，不参与学习；恢复后保留原有进度。</p>${trash.length?`<div class="trash-list">${trash.map(e=>`<div><span>${esc(entryTitle(e))}<small>${modules[e.module].title}</small></span><button class="text-button" data-action="restore-entry" data-id="${e.id}">${icon('refresh')} 恢复</button></div>`).join('')}</div>`:'<div class="empty-small">回收站为空。</div>'}</section><section class="panel info-panel"><h2>${icon('book')} 使用小贴士</h2><ul class="tips-list"><li>使用本地启动入口，保持 <strong>http://localhost:4173</strong> 和同一个浏览器。更换网址或浏览器后，需要导入备份。</li><li>请勿使用无痕模式保存长期学习记录；清除浏览器数据会影响本机记录。</li><li>照片转录、中文释义和音标是整理稿，请逐步核对；你新增的音标需要自己填写。</li><li>手机正式网址和 Supabase 接入留给下一阶段。本地启动只开放给这台电脑。</li></ul></section></div>`;
+    <div class="settings-grid"><section class="panel info-panel"><h2>${icon('trash')} 回收站 <span class="count-badge">${trash.length}</span></h2><p>删除的内容先保留在这里，不参与学习；恢复后保留原有进度。</p>${trash.length?`<div class="trash-list">${trash.map(e=>`<div><span>${esc(entryTitle(e))}<small>${modules[e.module].title}</small></span><button class="text-button" data-action="restore-entry" data-id="${e.id}">${icon('refresh')} 恢复</button></div>`).join('')}</div>`:'<div class="empty-small">回收站为空。</div>'}</section></div>`;
 }
 
 function openModal(html, wide=false) {
@@ -802,7 +823,7 @@ function detail(id) {
     <div class="detail-line${isWord?' word-meta':''}">${e.ipa ? `<span class="ipa">/${esc(e.ipa)}/</span>` : ''}${pos ? `<span>${esc(pos)}</span>` : ''}${statusOf(e)}</div>
     <div class="button-row"><button class="btn small" data-action="speak" data-id="${e.id}">${icon('speaker')} 朗读</button><button class="btn small" data-action="speak-slow" data-id="${e.id}">慢速</button></div>
     <h3 class="detail-meaning">${esc(e.zh)}</h3>
-    ${isWord ? renderWordExamples(e) : `<div class="detail-example"><p lang="en">${esc(e.example)}</p><p>${esc(e.exampleZh)}</p></div>`}
+    ${isWord ? renderWordExamples(studyExamples(e)) : `<div class="detail-example"><p lang="en">${esc(e.example)}</p><p>${esc(e.exampleZh)}</p></div>`}
     ${collocations}${isWord ? renderRelatedWords(e) : ''}
     ${isWord ? `<details class="word-detail-notes"><summary>备注与来源</summary>${notes}</details>` : notes}
     <div class="dialog-actions"><button class="btn" data-action="close-dialog">关闭</button><button class="btn primary" data-action="edit" data-id="${e.id}">${icon('edit')} ${e.needsCheck?'核对并编辑':'编辑与备注'}</button></div>`,true);
@@ -839,7 +860,7 @@ function openWordStudyImport() {
     <form id="word-study-import-form" class="word-import-form">
       <label>分类<select name="scene">${scenes.map(scene => `<option value="${esc(scene)}" ${ui.category === scene ? 'selected' : ''}>${esc(categoryLabel('words',scene))}</option>`).join('')}</select></label>
       <label>词卡补充资料<textarea name="content" rows="8" maxlength="250000" required aria-describedby="word-study-import-help"></textarea></label>
-      <p id="word-study-import-help" class="subtle">每行写「单词｜词性｜例句一｜中文一｜例句二｜中文二｜相关词=中文」。多个相关词用英文分号隔开。</p>
+      <p id="word-study-import-help" class="subtle">每行写「单词｜词性｜例句一｜中文一｜例句二｜中文二｜相关词=中文」。多个相关词用英文分号隔开。只补音标时写「单词｜音标」。</p>
       <div class="dialog-actions"><label>读取本机 TXT <input type="file" id="word-import-file" accept=".txt,text/plain"></label><button type="submit" class="btn primary">预览补充内容</button></div>
     </form>`,true);
 }
@@ -852,11 +873,15 @@ function previewWordStudyImport(form) {
     if (!changes.size) { toast('这个分类没有需要补充的匹配词卡。'); return; }
     const current = state;
     const label = categoryLabel('words',scene);
-    showConfirm('补充词卡', `<p>为「${esc(label)}」里的 ${changes.size} 张词卡补充词性、例句和相关词。</p>`, '保存补充内容', () => {
+    const pronunciationOnly=[...changes.values()].every(update=>update.ipa);
+    showConfirm('补充词卡', `<p>为「${esc(label)}」里的 ${changes.size} 张词卡补充${pronunciationOnly?'音标':'学习资料'}。</p>`, '保存补充内容', () => {
       if (state !== current) { toast('学习数据已有更新，请重新预览。'); return; }
       commit(next => {
         for (const entry of next.entries) {
-          if (changes.has(entry.id)) entry.wordStudy = changes.get(entry.id);
+          const update=changes.get(entry.id);
+          if (!update) continue;
+          if (update.ipa) entry.ipa=update.ipa;
+          else entry.wordStudy=update;
         }
       });
       render();
@@ -1077,9 +1102,10 @@ function performRestore() {
   }catch{pendingRestore=null;$('#dialog').close();toast('浏览器无法保存恢复数据，恢复已停止，原记录未替换。请保留下载的副本。');}
 }
 
+const voiceLanguage=v=>v.lang.toLowerCase().replace('_','-');
 function updateVoices() {
   const availableVoices=window.speechSynthesis?.getVoices?.() || [];
-  voices=Array.from(availableVoices).filter(v=>v.localService&&/^en[-_]/i.test(v.lang));
+  voices=Array.from(availableVoices).filter(v=>v.localService&&/^en(?:[-_]|$)/i.test(v.lang));
   if(ui.page==='settings'&&!$('#dialog').open)render();
 }
 function stopPhoneme() {
@@ -1101,11 +1127,16 @@ function playPhoneme(sound) {
 
 function speak(text,slow=false) {
   stopPhoneme();
-  if(!('speechSynthesis' in window)){toast('当前浏览器不支持朗读，请换用支持朗读的浏览器。');return;}
+  if(!window.speechSynthesis){toast('当前浏览器无法朗读。');return;}
   updateVoices();
-  const matching=voices.filter(v=>v.lang.toLowerCase()===state.settings.accent.toLowerCase());
-  const voice=matching.find(v=>v.voiceURI===state.settings.voiceURI)||matching[0];
-  if(!voice){openModal(`<div class="modal-icon">${icon('speaker')}</div><h2 id="dialog-title">还没有对应的本机声音</h2><p>没有找到${state.settings.accent==='en-GB'?'英式':'美式'}英语本机声音。请在电脑或手机的系统语音设置中安装相应英语语音包，重新打开浏览器后再试。</p><p>也可以在“备份与设置”切换到已经安装的另一种口音。本网页不会自动使用网络朗读。</p><button class="btn primary" data-action="close-dialog">知道了</button>`);return;}
+  const accent=state.settings.accent.toLowerCase();
+  const matching=voices.filter(v=>voiceLanguage(v)===accent);
+  const voice=matching.find(v=>v.voiceURI===state.settings.voiceURI)||matching[0]||voices[0];
+  if(!voice){toast('这台设备暂未提供本机英语声音。可在系统语音设置中检查。');return;}
+  if(!matching.length&&explainedVoiceFallback!==voice.voiceURI){
+    explainedVoiceFallback=voice.voiceURI;
+    toast('所选口音暂不可用，已用设备上的其他英语声音。');
+  }
   speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text);utterance.voice=voice;utterance.lang=voice.lang;utterance.rate=slow?0.72:0.95;
   utterance.onerror=e=>{if(!['canceled','interrupted'].includes(e.error))toast('这次发音没有播放成功，请检查系统英语语音包。');};
   speechSynthesis.speak(utterance);
@@ -1176,9 +1207,9 @@ document.addEventListener('click',event=>{
   else if(action==='focus-review')startReview('grammar',currentFocusTopic().ids);
   else if(action==='stuck-review'&&ui.page==='stuck')startReview(undefined,recentlyStuck(state).map(row=>row.entry.id),true);
   else if(action==='stuck-more'){ui.limit+=24;render();}
-  else if(action==='study-words-review'&&ui.page==='situations'){
+  else if(action==='study-words-review'&&['words','situations'].includes(ui.page)){
     const group=STUDY_WORD_GROUPS.find(item=>item.id===b.dataset.scene);
-    if(group)startReview('words',studyWords(group).map(entry=>entry.id));
+    if(group)startReview('words',studyWords(group).map(entry=>entry.id),false,group.id);
   }
   else if(action==='scene-language'&&ui.page==='situations'){
     sceneView.bilingual=b.dataset.value==='bilingual';
@@ -1238,7 +1269,6 @@ document.addEventListener('click',event=>{
   else if(action==='start-spelling'&&ui.page==='words')startSpelling();
   else if(action==='flip')revealCard();
   else if(action==='review-related')addRelatedReviewCards();
-  else if(action==='jump-rating')$('#review-rating-title')?.focus();
   else if(action==='rate')rate(b.dataset.rating);
   else if(action==='direction'){if(ui.session){ui.session.direction=b.dataset.value;ui.session.flipped=false;render();}}
   else if(action==='skip-spelling')answerSpelling(true);
@@ -1256,11 +1286,16 @@ document.addEventListener('input',event=>{
   if(event.target.id==='library-search'){ui.search=event.target.value;ui.limit=defaultListLimit(ui.page);renderLibraryResults();}
 });
 document.addEventListener('toggle',event=>{
-  const group=event.target.dataset?.indexGroup;
-  if(group===undefined||!event.target.isConnected||!usesLibraryIndex(ui.page)||isLibraryFiltered())return;
+  const details=event.target;
+  const group=details.dataset?.indexGroup;
+  if(group===undefined||!details.isConnected||!usesLibraryIndex(ui.page)||isLibraryFiltered())return;
   const openGroups=openLibraryGroups[ui.page];
-  if(event.target.open)openGroups.add(group);
-  else openGroups.delete(group);
+  if(!details.open){openGroups.delete(group);return;}
+  openGroups.add(group);
+  if(ui.page==='words'){
+    const list=details.querySelector('ul');
+    if(!list.children.length) list.innerHTML=filteredEntries().filter(card=>entryCategory(card)===group).map(libraryIndexRow).join('');
+  }
 },true);
 document.addEventListener('change',event=>{
   const el=event.target;
