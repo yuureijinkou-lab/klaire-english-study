@@ -723,8 +723,45 @@ dialog{border:1px solid #e1e6d8;border-radius:18px;padding:33px;width:min(475px,
 .library-index-heading > div { display: flex; align-items: baseline; gap: 4px 8px; flex-wrap: wrap; }
 .library-index-heading h2 { margin: 0; }
 .library-index-heading #result-summary { color: var(--muted); font-size: var(--type-meta); }
-.library-index-actions { margin-bottom: 10px; }
+.library-index-actions { margin-bottom: 10px; flex-wrap: wrap; }
 .library-index-actions .btn { flex: 1 1 0; max-width: 135px; }
+:is(#word-import-form,.word-import-form) { display: grid; gap: 12px; }
+:is(#word-import-form,.word-import-form) label { display: grid; gap: 4px; min-width: 0; }
+:is(#word-import-form,.word-import-form) :is(input,textarea,select) { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; font: inherit; }
+:is(#word-import-form,.word-import-form) textarea { resize: vertical; }
+#word-import-form > .text-button { justify-self: start; }
+.word-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+  color: var(--green);
+  font-size: 19px;
+  font-weight: 650;
+}
+.word-meta .ipa { font-size: inherit; }
+.library-index-row-name .word-row-pos { margin-inline-end: 0.45em; color: var(--green); white-space: nowrap; }
+.flash-answer .word-meta { justify-content: center; margin-block: 8px 14px; }
+.flashcard .flash-ipa { font-size: 19px; }
+.word-study-box, .word-detail-notes {
+  margin-block: 14px;
+  padding: 12px 15px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f1f6ef;
+  text-align: left;
+}
+.word-study-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.word-study-box h3 { margin: 0; font-size: 15px; color: var(--green); }
+.word-study-box ul { list-style: none; margin: 5px 0 0; padding: 0; }
+.word-study-box li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding-block: 8px; }
+.word-study-box li + li { border-top: 1px solid var(--line); }
+.word-study-box li > div { min-width: 0; overflow-wrap: anywhere; }
+.word-study-box li p { margin: 0; font-size: 15px; line-height: 1.55; }
+.word-study-box li p.word-study-meaning { color: var(--muted); font-size: 13px; margin-top: 3px; }
+.word-study-box .sound-button { flex-shrink: 0; }
+.word-detail-notes summary { cursor: pointer; color: var(--green); font-size: 14px; font-weight: 650; }
+.word-detail-notes .detail-notes { margin-top: 16px; }
 .library-index-controls :is(.btn,.text-button) { min-height: 42px; padding: 5px 10px; white-space: nowrap; }
 .library-index-controls :is(.btn,.text-button) .icon { width: 16px; height: 16px; flex-shrink: 0; }
 .library-index-controls :is(.text-button,#library-filter-toggle) { color: var(--green); }

@@ -39,6 +39,31 @@ export function parseEntryLines(text) {
   });
 }
 
+export function planWordImport(existing, text, scene, makeId) {
+  const rows = parseEntryLines(text);
+  if (!rows.length) throw new Error('请填写至少一条单词。');
+  if (rows.some(row => row.en.length > 500 || row.zh.length > 1000 || row.ipa.length > 500 || row.example.length > 2000)) {
+    throw new Error('有词条超过长度限制，请缩短后再导入。');
+  }
+
+  const normalize = value => value.normalize('NFKC').trim().toLowerCase().replace(/\s+/g, ' ');
+  const keyFor = ({ en, zh }) => JSON.stringify([normalize(en), normalize(zh)]);
+  const keys = new Set(existing.filter(row => row.module === 'words' && row.scene === scene).map(keyFor));
+  const entries = [];
+  for (const row of rows) {
+    const key = keyFor(row);
+    if (keys.has(key)) continue;
+    keys.add(key);
+    entries.push({
+      ...row, id: makeId(), module: 'words', kind: 'word', scene,
+      ipa: row.ipa.replace(/^\/+|\/+$/g, '').trim(),
+      pos: '', exampleZh: '', notes: '', source: '个人词表', sourceNote: '',
+      favorite: false, needsCheck: false, deletedAt: 0
+    });
+  }
+  return { entries, skipped: rows.length - entries.length };
+}
+
 // Plain text is convenient for pasting notes or importing a local UTF-8 file.
 export function parseLessonText(text, book, source = '') {
   const records = [];

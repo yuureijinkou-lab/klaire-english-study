@@ -1,5 +1,5 @@
-import { JournalRepository, SnapshotSync } from './cloud-core.js';
-import { createState, prepareState, validateState, exportObject } from './core.js';
+import { JournalRepository, SnapshotSync } from './cloud-core.js?v=20261123-vocabulary';
+import { createState, prepareState, validateState, exportObject } from './core.js?v=20261123-vocabulary';
 import { SEED_ENTRIES } from './data.js';
 export const CLOUD_URL='https://xuzekwjaymklaeftcwnj.supabase.co';
 export const CLOUD_KEY='sb_publishable_b1Dl8JMQNDBhP5rgR5RhPg_5PakLs1Y';

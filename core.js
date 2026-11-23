@@ -1,5 +1,6 @@
 import { cloneStudyData } from './compat.js';
-import {LESSON_MODULES, lessonKey, validateLessons} from './curriculum.js';
+import {LESSON_MODULES, lessonKey, validateLessons} from './curriculum.js?v=20261123-vocabulary';
+import { validateWordStudy } from './word-study.js';
 
 export const SCHEMA_VERSION = 3;
 export const STORAGE_KEY = 'english-garden.v1';
@@ -128,6 +129,7 @@ export function validateState(input) {
     ids.add(e.id);
     return { ...Object.fromEntries(['id','module',...fields,'favorite','needsCheck','deletedAt'].map(k => [k, e[k]])),kind,
       ...(grammar?{examples:e.examples.map(x=>({en:x.en,zh:x.zh}))}:{}),
+      ...(kind==='word'&&e.wordStudy!==undefined?{wordStudy:validateWordStudy(e.wordStudy)}:{}),
       ...(lessonEntry?{bookNumber:e.bookNumber,lessonNumber:e.lessonNumber}:{}) };
   });
   const progress = {};

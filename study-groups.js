@@ -1,6 +1,6 @@
 export const STUDY_WORD_GROUPS = [
   {
-    id:'train', name:'出行搭配', title:'错过火车',
+    id:'train', name:'出行搭配', label:'旅游词汇', title:'错过火车',
     note:'一起记 miss the train、get to the station 和 catch the next train。',
     contrasts:[
       {title:'什么时候用过去完成时？', card:'grammar-klaire-past-reference', examples:[
@@ -31,7 +31,7 @@ export const STUDY_WORD_GROUPS = [
     ]
   },
   {
-    id:'appointment', name:'预约搭配', title:'预约与改期',
+    id:'appointment', name:'预约搭配', label:'预约词汇', title:'预约与改期',
     note:'一起记 make an appointment、reschedule it 和 confirm the time。',
     contrasts:[
       {title:'新预约、改时间和取消', card:'grammar-klaire-practical-collocations', examples:[

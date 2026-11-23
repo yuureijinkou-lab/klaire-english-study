@@ -1,5 +1,5 @@
 import { cloneStudyData, studyUuid } from './compat.js';
-import { validateState } from './core.js';
+import { validateState } from './core.js?v=20261123-vocabulary';
 
 const copy = value => cloneStudyData(value);
 const same = (a,b) => JSON.stringify(a) === JSON.stringify(b);
