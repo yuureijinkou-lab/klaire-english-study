@@ -15,6 +15,7 @@ import { STUDY_WORD_GROUPS } from './study-groups.js';
 import { partOfSpeechLabel, planWordStudyImport, studyExamples, relatedReviewIds } from './word-study.js?v=20261124';
 import { BrowserRepository } from './repository.js?v=20261124';
 import { createCloud } from './cloud.js?v=20261124';
+import { createMobileSpeech } from './mobile-speech.js';
 
 const $ = s => document.querySelector(s);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -122,6 +123,7 @@ let voices = [];
 let explainedVoiceFallback = '';
 let phonemePlayer;
 let speechUtterance;
+const mobileSpeech = createMobileSpeech(speakNative);
 const entryTitle=e=>e?.kind==='grammar'?e.title:e?.en||'';
 const entryMeaning=e=>e?.kind==='grammar'?e.explanation:e?.zh||'';
 const lines=text=>esc(text).replace(/\n/g,'<br>');
@@ -546,11 +548,17 @@ function renderHome(s) {
   const stuck = recentlyStuck(state);
   const recent = [...state.activities].reverse().find(a=>state.entries.some(e=>e.id===a.itemId&&!e.deletedAt));
   const recentEntry = recent && state.entries.find(e=>e.id===recent.itemId);
-  return `<section class="hero task-panel home-review-panel" aria-labelledby="home-review-title"><div class="hero-copy"><h1 id="home-review-title">今日复习</h1>
+  return `<section class="home-progress" aria-labelledby="home-progress-title">
+      <h1 id="home-progress-title">我的学习进度</h1>
+      <div class="stats-grid">
+        ${[[s.studied,'已学习','book',`共 ${s.total} 条`],[s.reviewedToday,'今日已复习','check',''],[s.spellingToday,'今日拼写','keyboard','']].map(([n,label,ic,small])=>`<div class="stat"><div class="stat-icon ${ic}">${icon(ic)}</div><div><div class="stat-label">${label}</div><strong>${n}</strong>${small?`<small>${small}</small>`:''}</div></div>`).join('')}
+      </div>
+    </section>
+    <section class="hero task-panel home-review-panel" aria-labelledby="home-review-title"><div class="hero-copy"><h2 id="home-review-title">今日复习</h2>
       ${next===undefined?'':`<p class="next-review">下一张卡到期于 ${reviewTime(next)}</p>`}</div>
       <div class="home-review-actions">${plans.map(({group,plan})=>`<div class="home-review-group">
         <button type="button" class="btn home-review-choice" data-action="start-review" data-module="${group.id}" ${plan.ids.length?'':'disabled'}><strong>${group.label}</strong><span>${plan.ids.length?`练 ${plan.ids.length} 张`:'暂无卡片'}</span></button>
-        ${plan.dueIds.length&&(plan.newCount||plan.dueIds.length>plan.ids.length)?`<button type="button" class="text-button" data-action="start-review" data-module="${group.id}" data-only-due="true" aria-label="只复习${group.label}到期卡 · ${plan.dueIds.length} 张">到期卡 · ${plan.dueIds.length}</button>`:''}
+        ${plan.dueIds.length&&(plan.newCount||plan.dueIds.length>plan.ids.length)?`<button type="button" class="text-button home-review-due" data-action="start-review" data-module="${group.id}" data-only-due="true" aria-label="只复习 ${plan.dueIds.length} 张到期${group.label}卡">${plan.dueIds.length} 张待复习</button>`:''}
       </div>`).join('')}</div>
       <div class="home-review-hub">
         ${moduleLinks([['focus',pageName('focus'),last?`继续上次主题 · ${last.title}`:'从时间与地点介词开始','flag']])}
@@ -559,9 +567,6 @@ function renderHome(s) {
           ${renderStuckList(stuck.slice(0,3))}
         </section>`:''}
       </div></section>
-    <section class="stats-grid" aria-label="学习概况">
-      ${[[s.studied,'已学习','book',`共 ${s.total} 条`],[s.reviewedToday,'今日已复习','check',''],[s.spellingToday,'今日拼写','keyboard','']].map(([n,label,ic,small])=>`<div class="stat"><div class="stat-icon ${ic}">${icon(ic)}</div><div><div class="stat-label">${label}</div><strong>${n}</strong>${small?`<small>${small}</small>`:''}</div></div>`).join('')}
-    </section>
     <div class="home-content">
       <section class="home-modules" aria-labelledby="home-modules-title"><div class="section-title"><h2 id="home-modules-title">学习模块</h2></div><div class="collection-grid">
         ${librarySections.map(([key,title,description,unit,group])=>{
@@ -780,6 +785,7 @@ function answerSpelling(skip=false) {
 
 function renderSettings(s) {
   const matching=voices.filter(v=>voiceLanguage(v)===state.settings.accent.toLowerCase());
+  const usesBuiltInSpeech=usesAppleMobileSpeech()&&mobileSpeech.available();
   const trash=state.entries.filter(e=>e.deletedAt);
   let previous=false,upgrade=false;try{previous=!!repository.previousRaw();upgrade=!!repository.beforeUpgradeRaw();}catch{}
   return `<section class="page-heading library-heading"><div><h1>备份与设置</h1></div></section>
@@ -796,8 +802,8 @@ function renderSettings(s) {
       <label class="setting-row"><span><strong>默认回忆方向</strong><small>单词、短语可切换；语法采用知识点回忆。</small></span><select data-setting="direction"><option value="en-zh" ${state.settings.direction==='en-zh'?'selected':''}>看英文想中文</option><option value="zh-en" ${state.settings.direction==='zh-en'?'selected':''}>看中文想英文</option></select></label>
       <div class="setting-note">${icon('info')}“记住了”按1、3、7、14、30天递进；“模糊”次日复习，“忘了”10分钟后复习并重置间隔。</div>
     </section><section class="panel settings-panel"><div class="panel-heading">${icon('speaker')}<div><h2>发音与口音</h2><p>音标统一显示英式；朗读可以切换。</p></div></div>
-      <label class="setting-row"><span><strong>朗读口音</strong><small>优先使用所选口音，也可用设备上已有的其他英语声音。</small></span><select data-setting="accent"><option value="en-GB" ${state.settings.accent==='en-GB'?'selected':''}>英式英语</option><option value="en-US" ${state.settings.accent==='en-US'?'selected':''}>美式英语</option></select></label>
-      <label class="voice-label" for="voice-select">本机声音</label><select id="voice-select" data-setting="voiceURI" ${!matching.length?'disabled':''}>${matching.length?`<option value="">自动选择本机声音</option>${matching.map(v=>`<option value="${esc(v.voiceURI)}" ${v.voiceURI===state.settings.voiceURI?'selected':''}>${esc(v.name)}</option>`).join('')}`:'<option>未找到对应口音的本机声音</option>'}</select>
+      <label class="setting-row"><span><strong>朗读口音</strong><small>${usesBuiltInSpeech?'使用网页内置语音。':'优先使用所选口音，也可用设备上已有的其他英语声音。'}</small></span><select data-setting="accent"><option value="en-GB" ${state.settings.accent==='en-GB'?'selected':''}>英式英语</option><option value="en-US" ${state.settings.accent==='en-US'?'selected':''}>美式英语</option></select></label>
+      ${usesBuiltInSpeech?'':`<label class="voice-label" for="voice-select">本机声音</label><select id="voice-select" data-setting="voiceURI" ${!matching.length?'disabled':''}>${matching.length?`<option value="">自动选择本机声音</option>${matching.map(v=>`<option value="${esc(v.voiceURI)}" ${v.voiceURI===state.settings.voiceURI?'selected':''}>${esc(v.name)}</option>`).join('')}`:'<option>未找到对应口音的本机声音</option>'}</select>`}
       <div class="voice-test"><button class="btn small" data-action="test-voice">${icon('speaker')} 试听一句</button><span class="subtle">This is an English pronunciation test.</span></div>
     </section></div>
     <div class="settings-grid"><section class="panel info-panel"><h2>${icon('trash')} 回收站 <span class="count-badge">${trash.length}</span></h2><p>删除的内容先保留在这里，不参与学习；恢复后保留原有进度。</p>${trash.length?`<div class="trash-list">${trash.map(e=>`<div><span>${esc(entryTitle(e))}<small>${modules[e.module].title}</small></span><button class="text-button" data-action="restore-entry" data-id="${e.id}">${icon('refresh')} 恢复</button></div>`).join('')}</div>`:'<div class="empty-small">回收站为空。</div>'}</section></div>`;
@@ -1127,6 +1133,7 @@ function stopPhoneme() {
 function playPhoneme(sound) {
   const url=phonemeAudioUrl(sound);
   if(!url)return;
+  mobileSpeech.stop();
   window.speechSynthesis?.cancel();
   stopPhoneme();
   const player=new Audio(url);
@@ -1139,14 +1146,25 @@ function playPhoneme(sound) {
 function speak(text,slow=false) {
   if(!text.trim())return;
   stopPhoneme();
+  if(usesAppleMobileSpeech()&&mobileSpeech.available()){
+    const synth=window.speechSynthesis;
+    if(synth?.speaking||synth?.pending)synth.cancel();
+    if(mobileSpeech.play(text,slow,state.settings.accent))return;
+  }
+  speakNative(text,slow);
+}
+
+function speakNative(text,slow=false) {
   const synth=window.speechSynthesis;
   if(!synth||typeof SpeechSynthesisUtterance!=='function'){toast('当前浏览器无法朗读。');return;}
   updateVoices();
   const accent=state.settings.accent.toLowerCase();
   const matching=voices.filter(v=>voiceLanguage(v)===accent);
-  const voice=matching.find(v=>v.voiceURI===state.settings.voiceURI)||matching[0]||voices[0];
+  const mobile=usesAppleMobileSpeech();
+  const preferred=mobile?matching.find(v=>/Samantha|Daniel|Serena/i.test(v.name)):undefined;
+  const voice=matching.find(v=>v.voiceURI===state.settings.voiceURI)||preferred||matching[0]||(mobile?undefined:voices[0]);
   // iOS WebKit can use the system voice by language even when it hides its voice list.
-  if(!voice&&!usesAppleMobileSpeech()){toast('这台设备暂未提供本机英语声音。可在系统语音设置中检查。');return;}
+  if(!voice&&!mobile){toast('这台设备暂未提供本机英语声音。可在系统语音设置中检查。');return;}
   if(voice&&!matching.length&&explainedVoiceFallback!==voice.voiceURI){
     explainedVoiceFallback=voice.voiceURI;
     toast('所选口音暂不可用，已用设备上的其他英语声音。');
@@ -1162,7 +1180,7 @@ function speak(text,slow=false) {
     if(!['canceled','interrupted'].includes(event.error))toast('这次发音没有播放成功，请检查系统英语语音包。');
   };
   speechUtterance=utterance;
-  if(synth.speaking||synth.pending)synth.cancel();
+  if(mobile||synth.speaking||synth.pending)synth.cancel();
   if(synth.paused)synth.resume();
   synth.speak(utterance);
 }
@@ -1326,6 +1344,7 @@ document.addEventListener('change',event=>{
   const el=event.target;
   if(el.id==='scene-picker'&&REVIEW_SCENES.some(scene=>scene.id===el.value)){
     sceneView.id=el.value;
+    mobileSpeech.stop();
     window.speechSynthesis?.cancel();
     render();
     $('#scene-picker')?.focus({preventScroll:true});
@@ -1435,4 +1454,5 @@ render();
 void cloud.initialize();
 window.speechSynthesis?.addEventListener?.('voiceschanged',updateVoices);
 updateVoices();
+if(usesAppleMobileSpeech())mobileSpeech.preload();
 setInterval(()=>{if(ui.page==='home'&&!$('#dialog').open)render();},60000);

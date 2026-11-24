@@ -1,0 +1,71 @@
+Klaire speech-generator.js source and license
+
+This component is the speak.js JavaScript port of eSpeak. Alon Zakai
+maintained the upstream port. The upstream AUTHORS file identifies
+eSpeak's author and contributors.
+
+License: GNU General Public License, version 3. See
+speech-generator-LICENSE.txt for the complete license text. Upstream
+copyright and license notices are retained in the distributed component
+and its sources.
+
+Corresponding Source
+
+The pinned upstream distribution contains the original eSpeak sources,
+pronunciation data, build scripts and the original compiled generator.
+Download the complete source archive at no charge:
+
+https://github.com/kripken/speak.js/archive/9c6f642f7d78bab51d16b2e8b79cdf205643ec35.zip
+
+Browse the same revision:
+
+https://github.com/kripken/speak.js/tree/9c6f642f7d78bab51d16b2e8b79cdf205643ec35
+
+Klaire's modification (2026-11-25)
+
+Klaire adds the upstream British English voice definition alongside
+the existing American English definition. The compiled eSpeak engine,
+American English voice data, dictionary and public interface are
+unchanged.
+
+The equivalent build-source additions are these:
+
+1. In src/bundle.py, insert the following after the en_us data block.
+   Both lines are inside process() at the same indentation as en_us.
+
+  f = Popen(['python', '/home/alon/Dev/emscripten/tools/file2json.py', os.path.join(base_dir, 'espeak-data/voices/en/en'), 'en_uk'], stdout=PIPE).communicate()
+  files += f[0]
+
+2. In src/post.js, insert the following after creation of en-us:
+
+  FS.createDataFile('/espeak/espeak-data/voices/en', 'en', en_uk, true, false);
+
+The upstream toolchain and shell assembly are described in
+src/emscripten.sh at the pinned revision. Klaire used that revision's
+prebuilt speakGenerator.js without recompiling the original engine.
+This equivalent build recipe reproduces the distributed bytes from
+the pinned source archive (use unmodified LF line endings):
+
+    from pathlib import Path
+
+    upstream = Path('speakGenerator.js').read_bytes()
+    british_voice = Path('espeak-data/voices/en/en').read_bytes()
+    start_marker = b'Tv("/espeak/espeak-data/voices/en","en-us",['
+    end_marker = b'],!0,!1);'
+    assert upstream.count(start_marker) == 1
+    end = upstream.index(end_marker, upstream.index(start_marker)) + len(end_marker)
+    voice_bytes = ','.join(str(value) for value in british_voice).encode('ascii')
+    addition = b'Tv("/espeak/espeak-data/voices/en","en",[' + voice_bytes + end_marker
+    notice = '// Klaire modification (2026-11-25): bundle eSpeak’s British English voice. See speech-generator-SOURCE.txt.\n'.encode('utf-8')
+    Path('speech-generator.js').write_bytes(notice + upstream[:end] + addition + upstream[end:])
+
+SHA-256 (LF files)
+
+Upstream speakGenerator.js
+d83ce9905647988e7496fed48f897564cab264580c77de4d3191cb794dd29898
+
+Upstream espeak-data/voices/en/en
+abd465a688d62c00f8fa298183d4e2948e9abbac4efd447f937618bb9c4d16a4
+
+Distributed speech-generator.js
+fc9a465c7d3cf17c1c696e0ac66b8a56183df8a609e501ee27a233943844106a
