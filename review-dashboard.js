@@ -23,8 +23,10 @@ export function lastFocusTopic(state) {
   return last ? focusTopicForCard(last.itemId) : undefined;
 }
 
-export function makeHomeReviewPlan(state, now=Date.now()) {
-  const standardQueue = makeQueue(state,{now});
+export function makeHomeReviewPlan(state, now=Date.now(), {modules}={}) {
+  const scope = modules && new Set(modules);
+  const ids = scope && activeEntries(state).filter(entry=>scope.has(entry.module)).map(entry=>entry.id);
+  const standardQueue = makeQueue(state,{ids,now});
   const due = standardQueue.filter(id=>state.progress[id]);
   const newCards = standardQueue.filter(id=>!state.progress[id]);
   const focusDue = due.filter(id=>focusIds.has(id));
@@ -33,8 +35,8 @@ export function makeHomeReviewPlan(state, now=Date.now()) {
   const dueIds = [...focusDue,...otherDue];
   const dueInRound = dueIds.slice(0,SHORT_REVIEW_LIMIT);
   const newSlots = Math.min(SHORT_REVIEW_LIMIT-dueInRound.length,newCards.length);
-  // Start new material with one grammar card, then use the regular mixed queue.
-  const focus = newSlots
+  // When grammar is in scope, start new material with one priority grammar card.
+  const focus = newSlots && (!scope || scope.has('grammar'))
     ? makeQueue(state,{module:'grammar',ids:[...(last?.ids||[]),...openingGrammar],onlyNew:true,now}).slice(0,1)
     : [];
   const fresh = [...new Set([...focus,...newCards])].slice(0,newSlots);

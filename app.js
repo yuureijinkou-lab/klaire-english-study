@@ -4,7 +4,7 @@ import { SCHEMA_VERSION, STORAGE_KEY, DAY, NEW_PER_DAY_OPTIONS, kindFor, createS
 import { BOOKS, LESSON_MODULES, lessonKey, lessonFields, parseEntryLines, parseLessonText, planLessonImport, planWordImport } from './curriculum.js';
 import { COURSE_PAGES, courseSourcePage, courseHeading, courseLessonText } from './curriculum-ui.js';
 import { KLAIRE_REVIEW_TOPICS } from './klaire-review.js?v=20261124';
-import { REVIEW_SCENES, SHORT_REVIEW_LIMIT, focusTopicForCard, lastFocusTopic, makeHomeReviewPlan, nextScheduledReview, recentlyStuck } from './review-dashboard.js?v=20261124';
+import { REVIEW_SCENES, SHORT_REVIEW_LIMIT, focusTopicForCard, lastFocusTopic, makeHomeReviewPlan, nextScheduledReview, recentlyStuck } from './review-dashboard.js?v=20261125-audio';
 import { GRAMMAR_BRANCHES, TENSE_TIMELINES, renderGrammarMap } from './grammar-map.js?v=20261124';
 import { GUIDE_VIEWS, PEOPLE, guideAudio, phonemeAudioUrl, renderPhoneticGuide } from './grammar-reference.js';
 import { CLAUSE_GROUPS } from './grammar-clauses.js';
@@ -65,6 +65,11 @@ const modules = {
 const libraryModules=Object.entries(modules).filter(([key])=>!LESSON_MODULES.includes(key));
 const commonModules=['nce1','nce2'];
 const phraseModules=['daily','travel',...commonModules];
+const homeReviewGroups=[
+  {id:'grammar',label:'语法',modules:['grammar']},
+  {id:'words',label:'单词',modules:['words','course-words']},
+  {id:'phrases',label:'短语',modules:[...phraseModules,'course-phrases']}
+];
 const sections=[
   ['home','home','首页'],
   ['words','letters','单词'],
@@ -116,6 +121,7 @@ let undoAction = null;
 let voices = [];
 let explainedVoiceFallback = '';
 let phonemePlayer;
+let speechUtterance;
 const entryTitle=e=>e?.kind==='grammar'?e.title:e?.en||'';
 const entryMeaning=e=>e?.kind==='grammar'?e.explanation:e?.zh||'';
 const lines=text=>esc(text).replace(/\n/g,'<br>');
@@ -129,7 +135,7 @@ function renderWordCollocations(entry) {
 }
 const wordPos = entry => partOfSpeechLabel(entry.pos) || partOfSpeechLabel(entry.wordStudy?.pos);
 
-function renderWordExamples(examples) {
+function renderExamples(examples) {
   if (!examples.length) return '';
   return `<section class="word-study-box"><h3>例句</h3><ul>${examples.map(({ en, zh }) =>
     `<li><div>${en ? `<p lang="en">${esc(en)}</p>` : ''}${zh ? `<p class="word-study-meaning">${esc(zh)}</p>` : ''}</div>${en ? guideAudio(en,{escape:esc,icon}) : ''}</li>`
@@ -154,12 +160,12 @@ function renderRecallAnswer(entry, reverse) {
     pos ? `<span lang="en">${esc(pos)}</span>` : ''].join('');
   return `<div class="flash-answer"><h2>${esc(reverse ? entry.en : entry.zh)}</h2>
     ${meta ? `<div class="word-meta">${meta}</div>` : ''}
-    ${entry.kind === 'word' ? renderWordExamples(studyExamples(entry).slice(0,1)) : `<p class="example-en" lang="en">${esc(entry.example)}</p><p class="example-zh">${esc(entry.exampleZh)}</p>`}
+    ${renderExamples(studyExamples(entry).slice(0,1))}
     </div>`;
 }
 
 function renderRecallExtras(entry, session) {
-  const otherExamples = entry.kind==='word' ? renderWordExamples(studyExamples(entry).slice(1)) : '';
+  const otherExamples = entry.kind==='word' ? renderExamples(studyExamples(entry).slice(1)) : '';
   const reference = renderWordCollocations(entry) + phraseUsage(entry) +
     (entry.notes ? `<div class="flash-note">${icon('edit')} ${esc(entry.notes)}</div>` : '');
   return `${renderRelatedWords(entry,session)}
@@ -534,19 +540,18 @@ function render() {
 
 function renderHome(s) {
   const now = Date.now();
-  const plan = makeHomeReviewPlan(state,now);
-  const next = plan.dueIds.length ? undefined : nextScheduledReview(state,now);
+  const plans = homeReviewGroups.map(group=>({group,plan:makeHomeReviewPlan(state,now,group)}));
+  const next = plans.some(({plan})=>plan.dueIds.length) ? undefined : nextScheduledReview(state,now);
   const last = lastFocusTopic(state);
   const stuck = recentlyStuck(state);
   const recent = [...state.activities].reverse().find(a=>state.entries.some(e=>e.id===a.itemId&&!e.deletedAt));
   const recentEntry = recent && state.entries.find(e=>e.id===recent.itemId);
-  return `<section class="hero task-panel"><div class="hero-copy"><h1>今日复习</h1>
-      <p>${plan.ids.length?`本轮 ${plan.ids.length-plan.newCount} 张复习 · ${plan.newCount} 张新卡`:'今天暂无可复习的卡片。'}</p>
+  return `<section class="hero task-panel home-review-panel"><div class="hero-copy"><h1>今日复习</h1>
       ${next===undefined?'':`<p class="next-review">下一张卡到期于 ${reviewTime(next)}</p>`}</div>
-      <div class="home-review-actions">
-        ${plan.ids.length?`<button type="button" class="btn primary large" data-action="start-review">练 ${plan.ids.length} 张 ${icon('arrow')}</button>`:'<a class="btn" href="#home-modules-title">浏览学习模块</a>'}
-        ${plan.dueIds.length&&(plan.newCount||plan.dueIds.length>plan.ids.length)?`<button type="button" class="btn" data-action="start-review" data-only-due="true">只复习到期卡 · ${plan.dueIds.length} 张</button>`:''}
-      </div></section>
+      <div class="home-review-actions">${plans.map(({group,plan})=>`<div class="home-review-group">
+        <button type="button" class="btn home-review-choice" data-action="start-review" data-module="${group.id}" ${plan.ids.length?'':'disabled'}><strong>${group.label}</strong><span>${plan.ids.length?`练 ${plan.ids.length} 张`:'暂无卡片'}</span></button>
+        ${plan.dueIds.length&&(plan.newCount||plan.dueIds.length>plan.ids.length)?`<button type="button" class="text-button" data-action="start-review" data-module="${group.id}" data-only-due="true" aria-label="只复习${group.label}到期卡 · ${plan.dueIds.length} 张">到期卡 · ${plan.dueIds.length}</button>`:''}
+      </div>`).join('')}</div></section>
     <section class="stats-grid" aria-label="学习概况">
       ${[[s.studied,'已学习','book',`共 ${s.total} 条`],[s.reviewedToday,'今日已复习','check',''],[s.spellingToday,'今日拼写','keyboard','']].map(([n,label,ic,small])=>`<div class="stat"><div class="stat-icon ${ic}">${icon(ic)}</div><div><div class="stat-label">${label}</div><strong>${n}</strong>${small?`<small>${small}</small>`:''}</div></div>`).join('')}
     </section>
@@ -660,7 +665,8 @@ function entryCard(e) {
 }
 
 function startReview(module, scopedIds, onlyDue=false, sceneId='') {
-  const homePlan=ui.page==='home'&&!module&&!scopedIds?makeHomeReviewPlan(state):null;
+  const homeGroup=ui.page==='home'&&homeReviewGroups.find(group=>group.id===module);
+  const homePlan=homeGroup?makeHomeReviewPlan(state,Date.now(),homeGroup):null;
   const ids=homePlan?(onlyDue?homePlan.dueIds:homePlan.ids)
     : makeQueue(state,{module,onlyDue,ids:scopedIds??(module&&ui.page===module?filteredEntries().map(e=>e.id):undefined)});
   if(!ids.length&&onlyDue){
@@ -696,7 +702,7 @@ function renderCompletion(session) {
     <div class="section-title"><div><h1 id="completion-heading" tabindex="-1">${isReview?'本次复习结果':'本次拼写结果'}</h1><p>完成 ${session.results.length} ${isReview?'张卡':'次拼写'}</p></div>
       <button type="button" class="btn primary" data-action="end-session">返回${pageName(session.backPage)}</button></div>
     <dl class="result-counts ${isReview?'':'spelling-counts'}">${groups.map(group=>`<div class="${group.id}"><dt>${group.label}</dt><dd>${group.results.length}</dd></div>`).join('')}</dl>
-    ${sceneLine?`<details class="review-more"><summary>场景例句</summary>${renderWordExamples([sceneLine])}</details>`:''}
+    ${sceneLine?`<details class="review-more"><summary>场景例句</summary>${renderExamples([sceneLine])}</details>`:''}
     ${groups.filter(group=>group.results.length).map(group=>`<details class="review-result-group" ${['remembered','correct'].includes(group.id)?'':'open'}>
       <summary>${group.label} · ${group.results.length} ${isReview?'张':'条'}</summary>
       <ul class="review-focus-list">${group.results.map(result=>{
@@ -823,7 +829,7 @@ function detail(id) {
     <div class="detail-line${isWord?' word-meta':''}">${e.ipa ? `<span class="ipa">/${esc(e.ipa)}/</span>` : ''}${pos ? `<span>${esc(pos)}</span>` : ''}${statusOf(e)}</div>
     <div class="button-row"><button class="btn small" data-action="speak" data-id="${e.id}">${icon('speaker')} 朗读</button><button class="btn small" data-action="speak-slow" data-id="${e.id}">慢速</button></div>
     <h3 class="detail-meaning">${esc(e.zh)}</h3>
-    ${isWord ? renderWordExamples(studyExamples(e)) : `<div class="detail-example"><p lang="en">${esc(e.example)}</p><p>${esc(e.exampleZh)}</p></div>`}
+    ${renderExamples(studyExamples(e))}
     ${collocations}${isWord ? renderRelatedWords(e) : ''}
     ${isWord ? `<details class="word-detail-notes"><summary>备注与来源</summary>${notes}</details>` : notes}
     <div class="dialog-actions"><button class="btn" data-action="close-dialog">关闭</button><button class="btn primary" data-action="edit" data-id="${e.id}">${icon('edit')} ${e.needsCheck?'核对并编辑':'编辑与备注'}</button></div>`,true);
@@ -1103,6 +1109,11 @@ function performRestore() {
 }
 
 const voiceLanguage=v=>v.lang.toLowerCase().replace('_','-');
+function usesAppleMobileSpeech() {
+  const {userAgent='',platform='',maxTouchPoints=0}=window.navigator||{};
+  return /AppleWebKit\//.test(userAgent) && (/iPhone|iPad|iPod/.test(userAgent) || (platform==='MacIntel'&&maxTouchPoints>1));
+}
+
 function updateVoices() {
   const availableVoices=window.speechSynthesis?.getVoices?.() || [];
   voices=Array.from(availableVoices).filter(v=>v.localService&&/^en(?:[-_]|$)/i.test(v.lang));
@@ -1126,20 +1137,34 @@ function playPhoneme(sound) {
 }
 
 function speak(text,slow=false) {
+  if(!text.trim())return;
   stopPhoneme();
-  if(!window.speechSynthesis){toast('当前浏览器无法朗读。');return;}
+  const synth=window.speechSynthesis;
+  if(!synth||typeof SpeechSynthesisUtterance!=='function'){toast('当前浏览器无法朗读。');return;}
   updateVoices();
   const accent=state.settings.accent.toLowerCase();
   const matching=voices.filter(v=>voiceLanguage(v)===accent);
   const voice=matching.find(v=>v.voiceURI===state.settings.voiceURI)||matching[0]||voices[0];
-  if(!voice){toast('这台设备暂未提供本机英语声音。可在系统语音设置中检查。');return;}
-  if(!matching.length&&explainedVoiceFallback!==voice.voiceURI){
+  // iOS WebKit can use the system voice by language even when it hides its voice list.
+  if(!voice&&!usesAppleMobileSpeech()){toast('这台设备暂未提供本机英语声音。可在系统语音设置中检查。');return;}
+  if(voice&&!matching.length&&explainedVoiceFallback!==voice.voiceURI){
     explainedVoiceFallback=voice.voiceURI;
     toast('所选口音暂不可用，已用设备上的其他英语声音。');
   }
-  speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(text);utterance.voice=voice;utterance.lang=voice.lang;utterance.rate=slow?0.72:0.95;
-  utterance.onerror=e=>{if(!['canceled','interrupted'].includes(e.error))toast('这次发音没有播放成功，请检查系统英语语音包。');};
-  speechSynthesis.speak(utterance);
+  const utterance=new SpeechSynthesisUtterance(text);
+  if(voice)utterance.voice=voice;
+  utterance.lang=voice?.lang||state.settings.accent;
+  utterance.rate=slow?0.72:0.95;
+  utterance.onend=()=>{if(speechUtterance===utterance)speechUtterance=undefined;};
+  utterance.onerror=event=>{
+    if(speechUtterance!==utterance)return;
+    speechUtterance=undefined;
+    if(!['canceled','interrupted'].includes(event.error))toast('这次发音没有播放成功，请检查系统英语语音包。');
+  };
+  speechUtterance=utterance;
+  if(synth.speaking||synth.pending)synth.cancel();
+  if(synth.paused)synth.resume();
+  synth.speak(utterance);
 }
 
 document.addEventListener('click',event=>{
