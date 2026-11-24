@@ -138,9 +138,11 @@ dialog{border:1px solid #e1e6d8;border-radius:18px;padding:33px;width:min(475px,
   .review-focus-panel h2 { font-size: 17px; }
 }
 
-.home-content {
+.home-content, .home-review-panel {
   --home-card-inline: 22px;
   --home-card-radius: 14px;
+}
+.home-content {
   display: grid;
   gap: 32px;
 }
@@ -149,24 +151,24 @@ dialog{border:1px solid #e1e6d8;border-radius:18px;padding:33px;width:min(475px,
   gap: 16px;
 }
 .home-review-hub .course-links { gap: 14px; }
-.home-content .course-link,
+.home-review-hub .course-link,
 .home-modules .collection,
 .home-stuck {
   border-radius: var(--home-card-radius);
   padding-inline: var(--home-card-inline);
 }
-.home-content .course-link {
+.home-review-hub .course-link {
   min-height: 82px;
   gap: 12px;
 }
-.home-content .course-link > .icon:first-child {
+.home-review-hub .course-link > .icon:first-child {
   width: 44px;
   height: 44px;
   padding: 11px;
   border-radius: 10px;
   background: #edf3e9;
 }
-.home-content .course-link small { line-height: 1.5; }
+.home-review-hub .course-link small { line-height: 1.5; }
 .home-stuck {
   padding-block: 18px;
   background: #fbfcfa;
@@ -176,7 +178,8 @@ dialog{border:1px solid #e1e6d8;border-radius:18px;padding:33px;width:min(475px,
 .home-stuck > p:last-child { margin-bottom: 0; }
 .home-modules h2 { margin-top: 0; }
 @media(max-width:700px) {
-  .home-content { --home-card-inline: 16px; gap: 26px; }
+  .home-content, .home-review-panel { --home-card-inline: 16px; }
+  .home-content { gap: 26px; }
   .home-review-hub { gap: 14px; }
   .home-review-hub .course-links { gap: 12px; }
   .home-modules .collection { grid-template-columns: 44px minmax(0, 1fr) auto; column-gap: 12px; }
@@ -608,6 +611,7 @@ dialog{border:1px solid #e1e6d8;border-radius:18px;padding:33px;width:min(475px,
 .task-panel > .btn { min-height: 46px; flex-shrink: 0; }
 .home-review-hub { grid-template-columns: minmax(0,1fr) minmax(0,1.35fr); align-items: start; }
 .home-review-hub > .course-links { grid-template-columns: minmax(0,1fr); }
+.home-review-hub > .course-links:only-child { grid-column: 1 / -1; }
 .home-recent { margin-top: 24px; padding: 15px 18px; }
 .home-recent h2 { margin: 0; font-size: 16px; }
 .home-recent .last-entry { min-height: 44px; text-align: left; }
@@ -654,19 +658,42 @@ dialog{border:1px solid #e1e6d8;border-radius:18px;padding:33px;width:min(475px,
   .mobile-nav .nav-item { gap: 4px; font-size: 12px; }
 }
 
-.hero.home-review-panel { display: grid; gap: 12px; }
-.home-review-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.hero.home-review-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: none;
+  overflow: visible;
+}
+.home-review-panel .hero-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 16px;
+}
+.home-review-panel h1 { margin: 0; }
+.home-review-actions, .home-review-panel + .stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: clamp(8px, 1.3vw, 16px);
+}
 .home-review-group { min-width: 0; }
 .home-review-choice.btn {
   display: grid;
   gap: 4px;
   width: 100%;
   min-height: 68px;
-  padding: 10px 6px;
-  justify-items: center;
+  padding: 11px clamp(10px, 2vw, 20px);
+  justify-items: start;
+  text-align: left;
   color: var(--green);
-  background: #fbfcfa;
+  background: var(--review-surface);
+  border-color: var(--review-border);
 }
+.home-review-choice.btn:enabled:hover { background: var(--selected); }
 .home-review-choice strong { font-size: 16px; }
 .home-review-choice span { font-size: 12px; color: var(--muted); }
 .home-review-group > .text-button { display: block; margin: 2px auto 0; padding: 5px 3px; }
@@ -1008,7 +1035,7 @@ h3, .guide-panel h3, .collection h3,
 .backup-aside { background: var(--soft); }
 .stat-icon, .stat-icon.clock, .stat-icon.check,
 .collection-icon, .textbook-card .collection-icon,
-.home-content .course-link > .icon:first-child,
+.home-review-hub .course-link > .icon:first-child,
 .local-chip, .count-badge {
   background: var(--selected);
   color: var(--green);

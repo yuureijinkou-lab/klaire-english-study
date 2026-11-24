@@ -80,7 +80,7 @@ const sections=[
 ];
 const pageNames={
   home:'首页', course:'新概念教材', phrases:'短语', settings:'备份与设置',
-  focus:'我的复习重点', stuck:'最近卡住的', situations:'场景复习',
+  focus:'我的语法复习重点', stuck:'最近卡住的', situations:'场景复习',
   'grammar-map':'语法导图', pronunciation:'音标与发音'
 };
 const pageName=page=>pageNames[page]||COURSE_PAGES[page]||modules[page]?.title;
@@ -416,7 +416,7 @@ function renderReviewFocus() {
   const cards=topic.ids.map(id=>available.get(id)).filter(Boolean);
   const reviewed=cards.filter(card=>state.progress[card.id]).length;
   const due=cards.filter(card=>isDue(state,card)).length;
-  return `<section class="page-heading"><div><h1>我的复习重点</h1><p>当前主题 ${topic.title}。可切换主题或直接查看讲解。</p></div></section>
+  return `<section class="page-heading"><div><h1>${pageName('focus')}</h1><p>当前主题 ${topic.title}。可切换主题或直接查看讲解。</p></div></section>
     <div class="review-focus-layout">
       <div class="review-focus-topics" role="group" aria-label="复习主题">
         ${KLAIRE_REVIEW_TOPICS.map(group=>`<button type="button" class="review-focus-topic" data-action="focus-select" data-topic="${group.id}" aria-pressed="${group.id===topic.id}">
@@ -546,23 +546,23 @@ function renderHome(s) {
   const stuck = recentlyStuck(state);
   const recent = [...state.activities].reverse().find(a=>state.entries.some(e=>e.id===a.itemId&&!e.deletedAt));
   const recentEntry = recent && state.entries.find(e=>e.id===recent.itemId);
-  return `<section class="hero task-panel home-review-panel"><div class="hero-copy"><h1>今日复习</h1>
+  return `<section class="hero task-panel home-review-panel" aria-labelledby="home-review-title"><div class="hero-copy"><h1 id="home-review-title">今日复习</h1>
       ${next===undefined?'':`<p class="next-review">下一张卡到期于 ${reviewTime(next)}</p>`}</div>
       <div class="home-review-actions">${plans.map(({group,plan})=>`<div class="home-review-group">
         <button type="button" class="btn home-review-choice" data-action="start-review" data-module="${group.id}" ${plan.ids.length?'':'disabled'}><strong>${group.label}</strong><span>${plan.ids.length?`练 ${plan.ids.length} 张`:'暂无卡片'}</span></button>
         ${plan.dueIds.length&&(plan.newCount||plan.dueIds.length>plan.ids.length)?`<button type="button" class="text-button" data-action="start-review" data-module="${group.id}" data-only-due="true" aria-label="只复习${group.label}到期卡 · ${plan.dueIds.length} 张">到期卡 · ${plan.dueIds.length}</button>`:''}
-      </div>`).join('')}</div></section>
-    <section class="stats-grid" aria-label="学习概况">
-      ${[[s.studied,'已学习','book',`共 ${s.total} 条`],[s.reviewedToday,'今日已复习','check',''],[s.spellingToday,'今日拼写','keyboard','']].map(([n,label,ic,small])=>`<div class="stat"><div class="stat-icon ${ic}">${icon(ic)}</div><div><div class="stat-label">${label}</div><strong>${n}</strong>${small?`<small>${small}</small>`:''}</div></div>`).join('')}
-    </section>
-    <div class="home-content">
+      </div>`).join('')}</div>
       <div class="home-review-hub">
-        ${moduleLinks([['focus','我的复习重点',last?`继续上次主题 · ${last.title}`:'从时间与地点介词开始','flag']])}
+        ${moduleLinks([['focus',pageName('focus'),last?`继续上次主题 · ${last.title}`:'从时间与地点介词开始','flag']])}
         ${stuck.length?`<section class="panel review-focus-panel home-stuck" aria-labelledby="home-stuck-title">
           <div class="section-title"><h2 id="home-stuck-title">最近卡住的</h2><button class="text-button" data-nav="stuck">查看全部 ${stuck.length} 张 ${icon('arrow')}</button></div>
           ${renderStuckList(stuck.slice(0,3))}
         </section>`:''}
-      </div>
+      </div></section>
+    <section class="stats-grid" aria-label="学习概况">
+      ${[[s.studied,'已学习','book',`共 ${s.total} 条`],[s.reviewedToday,'今日已复习','check',''],[s.spellingToday,'今日拼写','keyboard','']].map(([n,label,ic,small])=>`<div class="stat"><div class="stat-icon ${ic}">${icon(ic)}</div><div><div class="stat-label">${label}</div><strong>${n}</strong>${small?`<small>${small}</small>`:''}</div></div>`).join('')}
+    </section>
+    <div class="home-content">
       <section class="home-modules" aria-labelledby="home-modules-title"><div class="section-title"><h2 id="home-modules-title">学习模块</h2></div><div class="collection-grid">
         ${librarySections.map(([key,title,description,unit,group])=>{
           const entries=group.flatMap(module=>activeEntries(state,module));
