@@ -14,7 +14,7 @@ import { BASIC_WORD_GROUPS } from './basic-words.js';
 import { STUDY_WORD_GROUPS } from './study-groups.js';
 import { partOfSpeechLabel, planWordStudyImport, studyExamples, relatedReviewIds } from './word-study.js';
 import { BrowserRepository } from './repository.js';
-import { createCloud } from './cloud.js?v=study-records-v1';
+import { createCloud } from './cloud.js?v=study-records-v2';
 import { createMobileSpeech } from './mobile-speech.js';
 
 const $ = s => document.querySelector(s);

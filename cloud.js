@@ -1,5 +1,5 @@
-import { JournalRepository, SnapshotSync } from './cloud-core.js?v=study-records-v1';
-import { createStudyRecords } from './cloud-records.js?v=study-records-v1';
+import { JournalRepository, SnapshotSync } from './cloud-core.js?v=study-records-v2';
+import { createStudyRecords } from './cloud-records.js?v=study-records-v2';
 import { createState, prepareState, exportObject } from './core.js?v=book2-v1';
 import { SEED_ENTRIES } from './data.js?v=book2-v1';
 export const CLOUD_URL='https://xuzekwjaymklaeftcwnj.supabase.co';
@@ -42,7 +42,7 @@ export function createCloud(host) {
       // auth client's token may change in another tab while a request is pending.
       const response=await fetch(CLOUD_URL+'/rest/v1/'+path,{method,headers:{apikey:CLOUD_KEY,Authorization:'Bearer '+token,'Content-Type':'application/json',...(prefer?{Prefer:prefer}:{})},...(body?{body:JSON.stringify(body)}:{})});
       check();if(!response.ok)throw Error('云端请求失败 '+response.status);
-      return response.status===204?null:response.json();
+      return response.status===204||prefer==='return=minimal'?null:response.json();
     }
     const owner='user_id=eq.'+encodeURIComponent(id);
     return {

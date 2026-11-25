@@ -77,5 +77,5 @@ export function createStudyRecords(seeds) {
     return validateState({...incoming,entries,lessons:{...incoming.lessons,...local.lessons},progress,activities});
   }
 
-  return {pack,unpack,merge};
+  return {pack,unpack,merge,needsCompaction:payload=>payload?.studyRecords===undefined};
 }

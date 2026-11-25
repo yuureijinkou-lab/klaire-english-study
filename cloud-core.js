@@ -73,10 +73,16 @@ export class SnapshotSync {
     this.pack=records?.pack??(payload=>payload);
     this.unpack=records?.unpack??parseState;
     this.merge=records?.merge??(payload=>payload);
+    this.needsCompaction=records?.needsCompaction??(()=>false);
     this.status='idle';this.conflict=null;this.busy=false;
   }
   setStatus(status,error=null){this.status=status;this.error=error;this.notify(this);}
-  async read(){const head=await this.transport.read();if(head){if(!Number.isSafeInteger(head.revision)||head.revision<1)throw Error('云端版本号异常');head.payload=this.unpack(head.payload);}return head;}
+  async read(){
+    const head=await this.transport.read();
+    if(!head)return head;
+    if(!Number.isSafeInteger(head.revision)||head.revision<1)throw Error('云端版本号异常');
+    return {...head,legacy:this.needsCompaction(head.payload),payload:this.unpack(head.payload)};
+  }
   async run() {
     if(this.busy||!this.active())return;this.busy=true;this.setStatus('syncing');
     try {
@@ -108,6 +114,13 @@ export class SnapshotSync {
         const payload=this.merge(head.payload,raw?parseState(raw):null);
         if(!same(this.repo.viewPayload,payload)&&!this.apply(copy(payload))){this.setStatus('deferred');return;}
         this.repo.adopt({...head,payload});
+        if(head.legacy){
+          // Material previously in the cloud has already been saved in the local cache.
+          const saved=await this.transport.write(head.revision,this.pack(head.payload));
+          if(!this.active())return;
+          if(!saved||this.repo.leaves().length){this.setStatus('pending');return;}
+          this.repo.adopt({...saved,payload:this.merge(this.unpack(saved.payload),payload)});
+        }
       }
       this.conflict=null;this.setStatus(head?'saved':'empty');
     }catch(error){this.setStatus('error',error);}finally{this.busy=false;}
