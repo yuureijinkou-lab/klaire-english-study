@@ -1,6 +1,6 @@
 import { cloneStudyData, studyUuid, prepareStudyDialog } from './compat.js';
-import { SEED_ENTRIES } from './data.js?v=20261124';
-import { SCHEMA_VERSION, STORAGE_KEY, DAY, NEW_PER_DAY_OPTIONS, kindFor, createState, prepareState, validateState, exportObject, activeEntries, isDue, schedule, recordReview, recordSpelling, checkSpelling, makeQueue, stats } from './core.js?v=20261124';
+import { SEED_ENTRIES } from './data.js?v=book2-v1';
+import { SCHEMA_VERSION, STORAGE_KEY, DAY, NEW_PER_DAY_OPTIONS, kindFor, createState, prepareState, validateState, exportObject, activeEntries, isDue, schedule, recordReview, recordSpelling, checkSpelling, makeQueue, stats } from './core.js?v=book2-v1';
 import { BOOKS, LESSON_MODULES, lessonKey, lessonFields, parseEntryLines, parseLessonText, planLessonImport, planWordImport } from './curriculum.js';
 import { COURSE_PAGES, courseSourcePage, courseHeading, courseLessonText } from './curriculum-ui.js';
 import { KLAIRE_REVIEW_TOPICS } from './klaire-review.js?v=20261124';
@@ -14,7 +14,7 @@ import { BASIC_WORD_GROUPS } from './basic-words.js';
 import { STUDY_WORD_GROUPS } from './study-groups.js';
 import { partOfSpeechLabel, planWordStudyImport, studyExamples, relatedReviewIds } from './word-study.js?v=20261124';
 import { BrowserRepository } from './repository.js?v=20261124';
-import { createCloud } from './cloud.js?v=20261124';
+import { createCloud } from './cloud.js?v=book2-v1';
 import { createMobileSpeech } from './mobile-speech.js';
 
 const $ = s => document.querySelector(s);

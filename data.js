@@ -225,4 +225,5 @@ import { BASIC_WORDS } from './basic-words.js';
 import { ADVANCED_TIMELINE_CARD } from './grammar-guidance.js?v=20261124';
 import { EXPANDED_GRAMMAR } from './grammar-expansion.js';
 import { STUDY_WORDS } from './study-groups.js';
-export const SEED_ENTRIES = [...words(photoOne,'a'), ...words(photoTwo,'b'), ...phrases(daily,'daily'), ...phrases(travel,'travel'), ...NCE1_PHRASES, ...GRAMMAR_ENTRIES, ...NCE2_COMMON, ...KLAIRE_REVIEW_ENTRIES, ...BASIC_WORDS, ADVANCED_TIMELINE_CARD, ...EXPANDED_GRAMMAR, ...STUDY_WORDS];
+import { BOOK_TWO_HANDWRITTEN } from './book2-handwritten.js';
+export const SEED_ENTRIES = [...words(photoOne,'a'), ...words(photoTwo,'b'), ...phrases(daily,'daily'), ...phrases(travel,'travel'), ...NCE1_PHRASES, ...GRAMMAR_ENTRIES, ...NCE2_COMMON, ...KLAIRE_REVIEW_ENTRIES, ...BASIC_WORDS, ADVANCED_TIMELINE_CARD, ...EXPANDED_GRAMMAR, ...STUDY_WORDS, ...BOOK_TWO_HANDWRITTEN];

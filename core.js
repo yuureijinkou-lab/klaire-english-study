@@ -16,11 +16,40 @@ export const DEFAULT_SETTINGS = { newPerDay: 10, accent: 'en-GB', direction: 'en
 export function createState(entries) {
   return { schemaVersion: SCHEMA_VERSION, entries: cloneStudyData(entries).map(e=>({...e,kind:e.kind||kindFor(e.module)})), lessons:{}, progress: {}, activities: [], settings: { ...DEFAULT_SETTINGS } };
 }
+
+function existingBookTwoCards(entries, seeds) {
+  const builtIns = seeds.filter(entry=>entry.id.startsWith('nce2-handwritten-'));
+  if (!builtIns.length) return new Set();
+  const fold = value => value.normalize('NFKC').trim().toLowerCase().replace(/\s+/g, ' ');
+  const group = cards => {
+    const byWord = new Map();
+    for (const card of cards) {
+      const word = fold(card.en);
+      if (!byWord.has(word)) byWord.set(word, []);
+      byWord.get(word).push(card);
+    }
+    return byWord;
+  };
+  const prior = group(entries.filter(entry=>entry.module==='words' && entry.scene===builtIns[0].scene));
+  const matched = new Set();
+  for (const [word,cards] of group(builtIns)) {
+    const originals = prior.get(word);
+    if (!originals) continue;
+    // Keep the old card ID, including edits and trash. Multiple senses require matching meanings.
+    const meanings = new Set(originals.map(card=>fold(card.zh)));
+    for (const card of cards) {
+      if (meanings.has(fold(card.zh)) || (cards.length===1 && originals.length===1)) matched.add(card.id);
+    }
+  }
+  return matched;
+}
+
 // Stable IDs preserve edits and soft deletions. Missing built-ins alone are appended.
 export function prepareState(input, seeds) {
   const state = validateState(input);
   const ids = new Set(state.entries.map(e=>e.id));
-  const additions = createState(seeds).entries.filter(e=>!ids.has(e.id));
+  const existingBookTwoIds = existingBookTwoCards(state.entries,seeds);
+  const additions = createState(seeds).entries.filter(e=>!ids.has(e.id)&&!existingBookTwoIds.has(e.id));
   state.entries.push(...additions);
   if(state.entries.length>20000)throw new Error('补充内置内容后超过20000条，无法恢复。当前记录未改变。');
   return { state, addedCount:additions.length, fromVersion:input.schemaVersion,

@@ -1,6 +1,6 @@
 import { JournalRepository, SnapshotSync } from './cloud-core.js?v=20261124';
-import { createState, prepareState, validateState, exportObject } from './core.js?v=20261124';
-import { SEED_ENTRIES } from './data.js?v=20261124';
+import { createState, prepareState, validateState, exportObject } from './core.js?v=book2-v1';
+import { SEED_ENTRIES } from './data.js?v=book2-v1';
 export const CLOUD_URL='https://xuzekwjaymklaeftcwnj.supabase.co';
 export const CLOUD_KEY='sb_publishable_b1Dl8JMQNDBhP5rgR5RhPg_5PakLs1Y';
 const ACTIVE_KEY='klaire.study.active-account';
