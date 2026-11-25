@@ -1,5 +1,5 @@
 import { cloneStudyData, studyUuid } from './compat.js';
-import { validateState } from './core.js?v=20261124';
+import { validateState } from './core.js';
 
 const copy = value => cloneStudyData(value);
 const same = (a,b) => JSON.stringify(a) === JSON.stringify(b);
@@ -68,12 +68,15 @@ export class JournalRepository {
 }
 
 export class SnapshotSync {
-  constructor(repository,transport,{apply=()=>true,notify=()=>{},active=()=>true}={}) {
+  constructor(repository,transport,{apply=()=>true,notify=()=>{},active=()=>true,records}={}) {
     this.repo=repository;this.transport=transport;this.apply=apply;this.notify=notify;this.active=active;
+    this.pack=records?.pack??(payload=>payload);
+    this.unpack=records?.unpack??parseState;
+    this.merge=records?.merge??(payload=>payload);
     this.status='idle';this.conflict=null;this.busy=false;
   }
   setStatus(status,error=null){this.status=status;this.error=error;this.notify(this);}
-  async read(){const head=await this.transport.read();if(head){if(!Number.isSafeInteger(head.revision)||head.revision<1)throw Error('云端版本号异常');head.payload=parseState(head.payload);}return head;}
+  async read(){const head=await this.transport.read();if(head){if(!Number.isSafeInteger(head.revision)||head.revision<1)throw Error('云端版本号异常');head.payload=this.unpack(head.payload);}return head;}
   async run() {
     if(this.busy||!this.active())return;this.busy=true;this.setStatus('syncing');
     try {
@@ -81,7 +84,9 @@ export class SnapshotSync {
       const drafts=this.repo.drafts(),leaves=this.repo.leaves();
       if(leaves.length){
         const leaf=leaves[0];
-        if(leaves.some(d=>!same(d.payload,leaf.payload))||((head?.revision??0)!==this.repo.base(leaf)&&!same(head?.payload,leaf.payload))){
+        const upload=this.pack(leaf.payload);
+        const matchesCloud=head&&same(this.pack(head.payload),upload);
+        if(leaves.some(d=>!same(d.payload,leaf.payload))||((head?.revision??0)!==this.repo.base(leaf)&&!matchesCloud)){
           this.conflict={head,leaves};this.setStatus('conflict');return;
         }
         if(!same(this.repo.viewPayload,leaf.payload)){
@@ -89,18 +94,20 @@ export class SnapshotSync {
           this.repo.viewPayload=copy(leaf.payload);this.repo.frame=leaf.id;
         }
         let saved=head;
-        if(!same(head?.payload,leaf.payload))saved=await this.transport.write(head?.revision??0,leaf.payload);
+        if(!matchesCloud){
+          saved=await this.transport.write(head?.revision??0,upload);
+          if(saved)saved={...saved,payload:this.unpack(saved.payload)};
+        }
         if(!this.active())return;
         if(!saved){this.conflict={head:await this.read(),leaves:this.repo.leaves()};this.setStatus('conflict');return;}
-        saved.payload=parseState(saved.payload);this.repo.acknowledge(drafts,saved);
+        this.repo.acknowledge(drafts,saved);
         this.conflict=null;this.setStatus(this.repo.leaves().length?'pending':'saved');return;
       }
       if(head){
-        if(!same(this.repo.viewPayload,head.payload)){
-          if(!this.apply(copy(head.payload))){this.setStatus('deferred');return;}
-          // apply may only replace the view when no user draft/editor is active.
-          this.repo.adopt(head);
-        }else this.repo.adopt(head);
+        const raw=this.repo.loadRaw();
+        const payload=this.merge(head.payload,raw?parseState(raw):null);
+        if(!same(this.repo.viewPayload,payload)&&!this.apply(copy(payload))){this.setStatus('deferred');return;}
+        this.repo.adopt({...head,payload});
       }
       this.conflict=null;this.setStatus(head?'saved':'empty');
     }catch(error){this.setStatus('error',error);}finally{this.busy=false;}
@@ -118,15 +125,19 @@ export class SnapshotSync {
       const chosen=choice==='cloud'?head?.payload:local?.payload;
       if(!chosen)throw Error('此版本不存在');
       // Archive every losing local alternative before acknowledging it.
-      for(const draft of leaves){if(!this.active())return;await this.transport.archive?.(draft.payload);if(!this.active())return;if(!unchanged()){this.setStatus('pending');return;}}
+      for(const draft of leaves){if(!this.active())return;await this.transport.archive?.(this.pack(draft.payload));if(!this.active())return;if(!unchanged()){this.setStatus('pending');return;}}
       if(!this.active())return;
       let saved=head;
-      if(choice!=='cloud')saved=await this.transport.write(head?.revision??0,chosen);
+      if(choice!=='cloud'){
+        saved=await this.transport.write(head?.revision??0,this.pack(chosen));
+        if(saved)saved={...saved,payload:this.unpack(saved.payload)};
+      }
       if(!this.active())return;
       if(!unchanged()){this.setStatus('pending');return;}
       if(!saved){this.conflict={head:await this.read(),leaves};this.setStatus('conflict');return;}
-      if(!this.apply(copy(saved.payload))){this.setStatus('deferred');return;}
-      this.repo.acknowledge(drafts,saved);this.repo.adopt(saved);this.conflict=null;this.setStatus('saved');
+      const payload=this.merge(saved.payload,local?.payload??this.repo.viewPayload);
+      if(!this.apply(copy(payload))){this.setStatus('deferred');return;}
+      this.repo.acknowledge(drafts,saved);this.repo.adopt({...saved,payload});this.conflict=null;this.setStatus('saved');
     }catch(error){this.setStatus('error',error);}finally{this.busy=false;}
   }
 }

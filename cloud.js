@@ -1,9 +1,11 @@
-import { JournalRepository, SnapshotSync } from './cloud-core.js?v=20261124';
-import { createState, prepareState, validateState, exportObject } from './core.js?v=book2-v1';
+import { JournalRepository, SnapshotSync } from './cloud-core.js?v=study-records-v1';
+import { createStudyRecords } from './cloud-records.js?v=study-records-v1';
+import { createState, prepareState, exportObject } from './core.js?v=book2-v1';
 import { SEED_ENTRIES } from './data.js?v=book2-v1';
 export const CLOUD_URL='https://xuzekwjaymklaeftcwnj.supabase.co';
 export const CLOUD_KEY='sb_publishable_b1Dl8JMQNDBhP5rgR5RhPg_5PakLs1Y';
 const ACTIVE_KEY='klaire.study.active-account';
+const studyRecords=createStudyRecords(SEED_ENTRIES);
 const labels={idle:'等待同步',syncing:'正在检查云端…',saved:'已保存到云端',pending:'本机已保存，等待上传',empty:'云端还没有记录，可上传本机记录',deferred:'云端有更新，结束编辑或复习后载入',conflict:'发现不同版本，请保留备份后选择',error:'暂未同步成功，本机草稿会保留'};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const summary=s=>`${s.entries.filter(e=>!e.deletedAt).length} 条内容 · ${s.activities.length} 次练习 · ${Object.keys(s.lessons).length} 课资料`;
@@ -48,7 +50,7 @@ export function createCloud(host) {
       async write(revision,payload){return (await request('rpc/save_english_study',{method:'POST',body:{expected_revision:revision,new_payload:payload}}))?.[0]??null;},
       async archive(payload){await request('english_study_versions',{method:'POST',body:{user_id:id,payload},prefer:'return=minimal'});},
       async history(){return request('english_study_versions?select=id,revision,created_at&'+owner+'&order=created_at.desc&limit=20');},
-      async version(idOfVersion){const rows=await request('english_study_versions?select=payload&'+owner+'&id=eq.'+encodeURIComponent(idOfVersion)+'&limit=1');return validateState(rows?.[0]?.payload);}
+      async version(idOfVersion){const rows=await request('english_study_versions?select=payload&'+owner+'&id=eq.'+encodeURIComponent(idOfVersion)+'&limit=1');return studyRecords.unpack(rows?.[0]?.payload);}
     };
   }
   function switchAccount(user) {
@@ -75,6 +77,7 @@ export function createCloud(host) {
     if(account?.id!==user.id&&!switchAccount(user))return;
     const epoch=generation,id=user.id;
     engine=new SnapshotSync(repo,transport(id,epoch),{
+      records:studyRecords,
       active:()=>epoch===generation&&active(),
       apply:payload=>{if(!host.canReplace())return false;host.receive(prepareState(payload,SEED_ENTRIES).state);return true;},
       notify:()=>{message='';publish();}
@@ -106,7 +109,7 @@ export function createCloud(host) {
       if(result.error){message='登录暂未恢复，请联网后重试；账号本机副本已保留。';publish();}
     }catch{message='暂时无法连接云端。请保留本机备份，联网后重试。';publish();}
   }
-  function panel(){return `<section class="panel backup-panel cloud-panel"><div class="panel-heading"><div><h2>账号与云端保存</h2><p>登录后可在不同设备上同步学习记录。</p></div></div><div class="cloud-content"><strong data-cloud-account>${esc(account?.email||'尚未登录')}</strong><p data-cloud-status role="status" aria-live="polite"></p>
+  function panel(){return `<section class="panel backup-panel cloud-panel"><div class="panel-heading"><div><h2>账号与云端保存</h2><p>同步内置内容的复习记录、收藏和备注。自己添加或导入的资料可下载完整备份。</p></div></div><div class="cloud-content"><strong data-cloud-account>${esc(account?.email||'尚未登录')}</strong><p data-cloud-status role="status" aria-live="polite"></p>
     <form method="post" id="cloud-login" class="cloud-auth-form" data-cloud-guest ${active()?'hidden':''}>
       <label class="cloud-auth-field" for="cloud-email">邮箱
         <input id="cloud-email" type="email" name="email" required autocomplete="username">
