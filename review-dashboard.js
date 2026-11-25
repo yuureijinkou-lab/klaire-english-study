@@ -1,5 +1,5 @@
-import {activeEntries, makeQueue} from './core.js?v=20261124';
-import {KLAIRE_REVIEW_TOPICS} from './klaire-review.js?v=20261124';
+import {activeEntries, makeQueue, reviewIdentity, reviewProgress} from './core.js?v=shared-review-v1';
+import {KLAIRE_REVIEW_TOPICS} from './klaire-review.js';
 
 const topicsById = new Map(KLAIRE_REVIEW_TOPICS.map(topic=>[topic.id,topic]));
 const focusIds = new Set(KLAIRE_REVIEW_TOPICS.flatMap(topic=>topic.ids));
@@ -27,8 +27,13 @@ export function makeHomeReviewPlan(state, now=Date.now(), {modules}={}) {
   const scope = modules && new Set(modules);
   const ids = scope && activeEntries(state).filter(entry=>scope.has(entry.module)).map(entry=>entry.id);
   const standardQueue = makeQueue(state,{ids,now});
-  const due = standardQueue.filter(id=>state.progress[id]);
-  const newCards = standardQueue.filter(id=>!state.progress[id]);
+  const byId = new Map(state.entries.map(entry=>[entry.id,entry]));
+  const due = [];
+  const newCards = [];
+  for (const id of standardQueue) {
+    if (reviewProgress(state,byId.get(id))) due.push(id);
+    else newCards.push(id);
+  }
   const focusDue = due.filter(id=>focusIds.has(id));
   const otherDue = due.filter(id=>!focusIds.has(id));
   const last = lastFocusTopic(state);
@@ -46,22 +51,35 @@ export function makeHomeReviewPlan(state, now=Date.now(), {modules}={}) {
 export function nextScheduledReview(state, now=Date.now()) {
   let next;
   for (const entry of activeEntries(state)) {
-    const dueAt = state.progress[entry.id]?.dueAt;
+    const dueAt = reviewProgress(state,entry)?.dueAt;
     if (!entry.needsCheck && dueAt > now && (next===undefined || dueAt < next)) next=dueAt;
   }
   return next;
 }
 
 export function recentlyStuck(state) {
-  const latestById = new Map();
+  const byId = new Map(state.entries.map(entry=>[entry.id,entry]));
+  const entries = new Map();
+  for (const entry of byId.values()) {
+    if (entry.deletedAt || entry.needsCheck) continue;
+    const identity = reviewIdentity(state,entry);
+    if (!entries.has(identity)) entries.set(identity,entry);
+  }
+  const latestByIdentity = new Map();
   for (const activity of state.activities) {
     if (activity.type!=='review') continue;
-    const previous = latestById.get(activity.itemId);
-    if (!previous||activity.at>=previous.at) latestById.set(activity.itemId,activity);
+    const card = byId.get(activity.itemId);
+    if (!card) continue;
+    const identity = reviewIdentity(state,card);
+    const previous = latestByIdentity.get(identity);
+    if (!previous||activity.at>=previous.at) latestByIdentity.set(identity,activity);
   }
-  return activeEntries(state).filter(entry=>!entry.needsCheck).flatMap(entry=>{
-    const last=latestById.get(entry.id);
-    return last&&['forgot','vague'].includes(last.rating) ? [{entry,rating:last.rating,at:last.at}] : [];
+  return [...entries].flatMap(([identity,fallback])=>{
+    const last = latestByIdentity.get(identity);
+    if (!last || !['forgot','vague'].includes(last.rating)) return [];
+    const rated = byId.get(last.itemId);
+    const entry = rated.deletedAt || rated.needsCheck ? fallback : rated;
+    return [{entry,rating:last.rating,at:last.at}];
   }).sort((a,b)=>b.at-a.at);
 }
 

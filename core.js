@@ -1,6 +1,7 @@
 import { cloneStudyData } from './compat.js';
 import {LESSON_MODULES, lessonKey, validateLessons} from './curriculum.js';
-import { validateWordStudy } from './word-study.js?v=20261124';
+import { SEED_ENTRIES } from './data.js?v=book2-v1';
+import { validateWordStudy } from './word-study.js';
 
 export const SCHEMA_VERSION = 3;
 export const STORAGE_KEY = 'english-garden.v1';
@@ -13,6 +14,77 @@ export const INTERVALS = [1, 3, 7, 14, 30];
 export const NEW_PER_DAY_OPTIONS = [5, 10, 20, 30, 'unlimited'];
 export const DEFAULT_SETTINGS = { newPerDay: 10, accent: 'en-GB', direction: 'en-zh', voiceURI: '', lastFocusTopic: '' };
 
+const fold = value => value.normalize('NFKC').trim().toLowerCase().replace(/\s+/g, ' ');
+const reviewPrompt = entry => JSON.stringify([fold(entry.en),fold(entry.zh)]);
+const catalogIds = new Set(SEED_ENTRIES.map(entry=>entry.id));
+const cardsByPrompt = new Map();
+const sharedCards = new Map();
+const sharedBookTwoPrompts = new Map();
+const bookTwoScene = SEED_ENTRIES.find(entry=>entry.id.startsWith('nce2-handwritten-'))?.scene;
+for (const entry of SEED_ENTRIES) {
+  if (!entry.en || !entry.zh) continue;
+  const prompt = reviewPrompt(entry);
+  if (!cardsByPrompt.has(prompt)) cardsByPrompt.set(prompt,[]);
+  cardsByPrompt.get(prompt).push(entry.id);
+}
+for (const [prompt,ids] of cardsByPrompt) {
+  if (ids.length < 2) continue;
+  const identity = `review:${ids[0]}`;
+  for (const id of ids) {
+    sharedCards.set(id,{identity,prompt});
+    // The same Book Two material may still use its original imported ID.
+    if (id.startsWith('nce2-handwritten-')) sharedBookTwoPrompts.set(prompt,identity);
+  }
+}
+
+function sharedReviewIdentity(entry) {
+  if (!entry.en || !entry.zh) return;
+  const shared = sharedCards.get(entry.id);
+  if (shared) return reviewPrompt(entry)===shared.prompt ? shared.identity : undefined;
+  if (!catalogIds.has(entry.id) && entry.module==='words' && entry.scene===bookTwoScene) {
+    return sharedBookTwoPrompts.get(reviewPrompt(entry));
+  }
+}
+
+export function reviewIdentity(state, entryOrId) {
+  const entry = typeof entryOrId==='string' ? state.entries.find(card=>card.id===entryOrId) : entryOrId;
+  return entry ? sharedReviewIdentity(entry) ?? entry.id : entryOrId;
+}
+
+export function reviewProgress(state, entryOrId) {
+  const entry = typeof entryOrId==='string' ? state.entries.find(card=>card.id===entryOrId) : entryOrId;
+  const identity = entry && sharedReviewIdentity(entry);
+  if (!identity) return state.progress[entry?.id ?? entryOrId];
+
+  // Keep per-card counters and history intact. Only the effective schedule is shared.
+  let latest;
+  let reviewCount = 0;
+  let lapses = 0;
+  const latestIds = new Set();
+  for (const card of state.entries) {
+    const progress = state.progress[card.id];
+    if (!progress || sharedReviewIdentity(card)!==identity) continue;
+    reviewCount += progress.reviewCount;
+    lapses += progress.lapses;
+    if (!latest || progress.lastReviewedAt > latest.lastReviewedAt) {
+      latest = progress;
+      latestIds.clear();
+    }
+    if (progress.lastReviewedAt===latest.lastReviewedAt) latestIds.add(card.id);
+  }
+  if (latestIds.size > 1) {
+    // Activity order breaks ties when multiple related cards were rated in the same millisecond.
+    for (let i=state.activities.length-1;i>=0;i--) {
+      const activity = state.activities[i];
+      if (activity.type==='review' && activity.at===latest.lastReviewedAt && latestIds.has(activity.itemId)) {
+        latest = state.progress[activity.itemId];
+        break;
+      }
+    }
+  }
+  return latest && {...latest,reviewCount,lapses};
+}
+
 export function createState(entries) {
   return { schemaVersion: SCHEMA_VERSION, entries: cloneStudyData(entries).map(e=>({...e,kind:e.kind||kindFor(e.module)})), lessons:{}, progress: {}, activities: [], settings: { ...DEFAULT_SETTINGS } };
 }
@@ -20,7 +92,6 @@ export function createState(entries) {
 function existingBookTwoCards(entries, seeds) {
   const builtIns = seeds.filter(entry=>entry.id.startsWith('nce2-handwritten-'));
   if (!builtIns.length) return new Set();
-  const fold = value => value.normalize('NFKC').trim().toLowerCase().replace(/\s+/g, ' ');
   const group = cards => {
     const byWord = new Map();
     for (const card of cards) {
@@ -63,7 +134,7 @@ export function activeEntries(state, module) {
   return state.entries.filter(e => !e.deletedAt && (!module || e.module === module));
 }
 export function isDue(state, entry, now = Date.now()) {
-  const p = state.progress[entry.id];
+  const p = reviewProgress(state,entry);
   return !entry.deletedAt && !entry.needsCheck && !!p && p.dueAt <= now;
 }
 export function schedule(previous, rating, now = Date.now()) {
@@ -76,9 +147,14 @@ export function schedule(previous, rating, now = Date.now()) {
 export function recordReview(state, itemId, rating, now = Date.now()) {
   const entry = state.entries.find(e => e.id === itemId);
   if (!entry || entry.deletedAt || entry.needsCheck) throw new Error('这条内容还不能复习');
-  const isNew = !state.progress[itemId];
-  state.progress[itemId] = schedule(state.progress[itemId], rating, now);
-  state.activities.push({ itemId, at: now, type: 'review', rating, isNew });
+  const previous = reviewProgress(state,entry);
+  const stored = state.progress[itemId];
+  state.progress[itemId] = {
+    ...schedule(previous,rating,now),
+    reviewCount:(stored?.reviewCount ?? 0) + 1,
+    lapses:(stored?.lapses ?? 0) + Number(rating==='forgot')
+  };
+  state.activities.push({ itemId, at: now, type: 'review', rating, isNew:!previous });
 }
 export function recordSpelling(state, itemId, correct, now = Date.now()) {
   const e=state.entries.find(e=>e.id===itemId);
@@ -95,14 +171,34 @@ export function makeQueue(state, { module, ids, now = Date.now(), onlyNew = fals
     const byId = new Map(active.map(entry=>[entry.id,entry]));
     entries = [...new Set(ids)].map(id=>byId.get(id)).filter(Boolean);
   }
-  const due = entries.filter(e => isDue(state, e, now)).sort((a, b) => state.progress[a.id].dueAt - state.progress[b.id].dueAt);
-  const learnedToday = state.activities.filter(a => a.type === 'review' && a.isNew && localDay(a.at) === localDay(now)).length;
-  const candidates=entries.filter(e=>!state.progress[e.id]);
+  const due = [];
+  const candidates = [];
+  const queued = new Set();
+  for (const entry of entries) {
+    const identity = reviewIdentity(state,entry);
+    if (queued.has(identity)) continue;
+    queued.add(identity);
+    const progress = reviewProgress(state,entry);
+    if (!progress) candidates.push(entry);
+    else if (progress.dueAt<=now) due.push({id:entry.id,dueAt:progress.dueAt});
+  }
+  due.sort((a,b)=>a.dueAt-b.dueAt);
+  const byId = new Map(state.entries.map(entry=>[entry.id,entry]));
+  const today = localDay(now);
+  const firstLearned = new Map();
+  let last;
+  for (const activity of state.activities) {
+    if (activity.type!=='review' || !activity.isNew) continue;
+    last = activity;
+    const identity = reviewIdentity(state,byId.get(activity.itemId) ?? activity.itemId);
+    const firstAt = firstLearned.get(identity);
+    if (firstAt===undefined || activity.at<firstAt) firstLearned.set(identity,activity.at);
+  }
+  const learnedToday = [...firstLearned.values()].filter(at=>localDay(at)===today).length;
   const allowance = state.settings.newPerDay === 'unlimited'
     ? candidates.length : Math.max(0, state.settings.newPerDay - learnedToday);
   // Rotate the first module after the most recent new item, including across sessions.
-  const last=[...state.activities].reverse().find(a=>a.type==='review'&&a.isNew);
-  const lastModule=state.entries.find(e=>e.id===last?.itemId)?.module;
+  const lastModule=byId.get(last?.itemId)?.module;
   const start=(MODULES.indexOf(lastModule)+1)%MODULES.length;
   const order=[...MODULES.slice(start),...MODULES.slice(0,start)];
   const buckets=order.map(m=>candidates.filter(e=>e.module===m));
@@ -112,17 +208,35 @@ export function makeQueue(state, { module, ids, now = Date.now(), onlyNew = fals
 }
 export function stats(state, now = Date.now()) {
   const entries = activeEntries(state);
-  const today = state.activities.filter(a => localDay(a.at) === localDay(now));
-  const studied = entries.filter(e => state.progress[e.id]).length;
-  const days = new Set(state.activities.map(a => localDay(a.at)));
+  const byId = new Map(state.entries.map(entry=>[entry.id,entry]));
+  const today = localDay(now);
+  const reviewIdentities = new Set();
+  const studied = new Set();
+  const due = new Set();
+  for (const entry of entries) {
+    const identity = reviewIdentity(state,entry);
+    reviewIdentities.add(identity);
+    const progress = reviewProgress(state,entry);
+    if (!progress) continue;
+    studied.add(identity);
+    if (!entry.needsCheck && progress.dueAt<=now) due.add(identity);
+  }
+  const days = new Set();
+  const reviewedToday = new Set();
+  let spellingToday = 0;
+  for (const activity of state.activities) {
+    const day = localDay(activity.at);
+    days.add(day);
+    if (day!==today) continue;
+    if (activity.type==='review') reviewedToday.add(reviewIdentity(state,byId.get(activity.itemId) ?? activity.itemId));
+    else if (activity.type==='spelling') spellingToday++;
+  }
   let cursor = new Date(now);
   if (!days.has(localDay(cursor))) cursor.setDate(cursor.getDate() - 1);
   let streak = 0;
   while (days.has(localDay(cursor))) { streak++; cursor.setDate(cursor.getDate() - 1); }
-  return { total: entries.length, studied, due: entries.filter(e => isDue(state, e, now)).length,
-    pending: entries.filter(e => e.needsCheck).length,
-    reviewedToday: new Set(today.filter(a => a.type === 'review').map(a => a.itemId)).size,
-    spellingToday: today.filter(a => a.type === 'spelling').length, streak };
+  return { total: entries.length, reviewTotal:reviewIdentities.size, studied:studied.size, due:due.size,
+    pending: entries.filter(e => e.needsCheck).length, reviewedToday:reviewedToday.size, spellingToday, streak };
 }
 
 // The export format is deliberately independent of browser storage and future cloud providers.
