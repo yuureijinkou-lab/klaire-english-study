@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#235b4b">
+  <meta name="description" content="个人英语学习网页：单词、日常短语、旅游短语、新概念一册短语、时态与语法、翻卡复习、拼写练习和学习记录备份。">
+  <title>Klaire’s Notes</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./styles.css?v=20261125-progress">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到学习内容</a>
+  <div id="app">
+    <main id="main" class="panel" role="status">
+      <h1>Klaire’s Notes</h1>
+      <p id="startup-status">正在加载。若页面一直未打开，请重新载入，或直接用手机浏览器打开这个网址。</p>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="dialog" aria-labelledby="dialog-title"></dialog>
+  <input type="file" id="backup-file" accept=".json,application/json" hidden>
+  <input type="file" id="course-file" accept=".txt,text/plain,.json,application/json" hidden>
+  <script src="./supabase.js"></script>
+  <script type="module" src="./startup.js?v=study-records-v1"></script>
+</body>
+</html>
